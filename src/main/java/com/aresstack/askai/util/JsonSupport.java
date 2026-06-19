@@ -92,6 +92,34 @@ public final class JsonSupport {
         return readJsonString(json, valueStart);
     }
 
+    public static String extractFirstNumberValue(String json, String key) {
+        if (json == null || key == null) {
+            return "";
+        }
+        String marker = "\"" + key + "\"";
+        int keyIndex = json.indexOf(marker);
+        if (keyIndex < 0) {
+            return "";
+        }
+        int colonIndex = json.indexOf(':', keyIndex + marker.length());
+        if (colonIndex < 0) {
+            return "";
+        }
+        int valueStart = skipWhitespace(json, colonIndex + 1);
+        int valueEnd = valueStart;
+        while (valueEnd < json.length()) {
+            char ch = json.charAt(valueEnd);
+            if (!(ch == '-' || ch == '+' || ch == '.' || Character.isDigit(ch))) {
+                break;
+            }
+            valueEnd++;
+        }
+        if (valueEnd <= valueStart) {
+            return "";
+        }
+        return json.substring(valueStart, valueEnd);
+    }
+
     public static String extractChatMessageContent(String json) {
         int messageIndex = json == null ? -1 : json.indexOf("\"message\"");
         if (messageIndex < 0) {

@@ -42,11 +42,11 @@ public final class OllamaModelsPanel extends JPanel {
         setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton refreshButton = new JButton("Refresh /api/tags");
+        JButton refreshButton = new JButton("Refresh models");
         refreshButton.addActionListener(event -> refreshModels());
-        JButton runningButton = new JButton("Show /api/ps");
+        JButton runningButton = new JButton("Show running models");
         runningButton.addActionListener(event -> showRunningModels());
-        JButton versionButton = new JButton("Version");
+        JButton versionButton = new JButton("Server version");
         versionButton.addActionListener(event -> showVersion());
         JButton deleteButton = new JButton("Delete selected");
         deleteButton.addActionListener(event -> deleteSelectedModel());
@@ -66,7 +66,7 @@ public final class OllamaModelsPanel extends JPanel {
     }
 
     private void refreshModels() {
-        append("Loading /api/tags from " + model.getOllamaBaseUrl());
+        append("Loading installed models from " + model.getOllamaBaseUrl());
         new SwingWorker<String, Void>() {
             @Override
             protected String doInBackground() throws Exception {
@@ -92,7 +92,7 @@ public final class OllamaModelsPanel extends JPanel {
     }
 
     private void showRunningModels() {
-        append("Loading /api/ps ...");
+        append("Loading running models ...");
         new SwingWorker<String, Void>() {
             @Override
             protected String doInBackground() throws Exception {
@@ -112,7 +112,7 @@ public final class OllamaModelsPanel extends JPanel {
     }
 
     private void showVersion() {
-        append("Loading /api/version ...");
+        append("Loading server version ...");
         new SwingWorker<String, Void>() {
             @Override
             protected String doInBackground() throws Exception {
@@ -137,7 +137,7 @@ public final class OllamaModelsPanel extends JPanel {
             append("No model selected.");
             return;
         }
-        append("Deleting " + selected + " ...");
+        append("Deleting model from AI server: " + selected + " ...");
         new SwingWorker<String, Void>() {
             @Override
             protected String doInBackground() throws Exception {

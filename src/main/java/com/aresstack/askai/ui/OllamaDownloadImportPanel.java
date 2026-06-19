@@ -14,7 +14,6 @@ import com.aresstack.windirectml.workbench.download.DownloadOverrideStore;
 import com.aresstack.windirectml.workbench.download.ModelDownloadManifest;
 import com.aresstack.windirectml.workbench.download.ModelDownloader;
 import com.aresstack.windirectml.workbench.panels.DownloadAccessConfigDialog;
-import com.aresstack.windirectml.workbench.panels.DownloadUrlConfigDialog;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -76,43 +75,40 @@ public final class OllamaDownloadImportPanel extends JPanel {
         setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
         JPanel form = new JPanel(new GridBagLayout());
-        form.setBorder(BorderFactory.createTitledBorder("Safetensors download and Ollama import"));
+        form.setBorder(BorderFactory.createTitledBorder("Install model on AI server"));
         GridBagConstraints constraints = new GridBagConstraints();
         constraints.insets = new Insets(4, 4, 4, 4);
         constraints.fill = GridBagConstraints.HORIZONTAL;
         constraints.anchor = GridBagConstraints.WEST;
 
-        addRow(form, constraints, 0, "Model candidate", candidateCombo);
-        addRow(form, constraints, 1, "Ollama model name", targetModelNameField);
-        addRow(form, constraints, 2, "Quantize on create", quantizationField);
-        addRow(form, constraints, 3, "Local folder", localFolderLabel);
-        addRow(form, constraints, 4, "Compatibility", compatibilityLabel);
+        addRow(form, constraints, 0, "Model", candidateCombo);
+        addRow(form, constraints, 1, "Install as", targetModelNameField);
+        addRow(form, constraints, 2, "Quantization", quantizationField);
+        addRow(form, constraints, 3, "Download folder", localFolderLabel);
+        addRow(form, constraints, 4, "Notes", compatibilityLabel);
         candidateCombo.addActionListener(event -> updateSelectionDetails());
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton configureButton = new JButton("Configure URLs");
-        configureButton.addActionListener(event -> configureUrls());
-        JButton accessButton = new JButton("HF Access");
+        JButton accessButton = new JButton("Hugging Face Access");
         accessButton.addActionListener(event -> configureAccess());
-        JButton openFolderButton = new JButton("Open Folder");
+        JButton openFolderButton = new JButton("Open download folder");
         openFolderButton.addActionListener(event -> openFolder());
-        JButton validateButton = new JButton("Validate Local Files");
+        JButton validateButton = new JButton("Validate files");
         validateButton.addActionListener(event -> validateLocalFiles());
-        JButton downloadButton = new JButton("Download");
+        JButton downloadButton = new JButton("Download files");
         downloadButton.addActionListener(event -> downloadSelectedModel(false));
-        JButton importButton = new JButton("Upload Blobs + Create");
+        JButton importButton = new JButton("Install local files");
         importButton.addActionListener(event -> importSelectedModel());
-        JButton fullSpikeButton = new JButton("Full Spike: Download -> Upload -> Create");
-        fullSpikeButton.addActionListener(event -> downloadSelectedModel(true));
+        JButton fullInstallButton = new JButton("Download and install");
+        fullInstallButton.addActionListener(event -> downloadSelectedModel(true));
 
-        buttons.add(configureButton);
         buttons.add(accessButton);
         buttons.add(openFolderButton);
         buttons.add(validateButton);
         buttons.add(forceDownloadBox);
         buttons.add(downloadButton);
         buttons.add(importButton);
-        buttons.add(fullSpikeButton);
+        buttons.add(fullInstallButton);
 
         JPanel top = new JPanel(new BorderLayout(8, 8));
         top.add(form, BorderLayout.CENTER);
@@ -144,21 +140,8 @@ public final class OllamaDownloadImportPanel extends JPanel {
         targetModelNameField.setText(candidate.getDefaultOllamaModelName());
         localFolderLabel.setText(targetDirectory(candidate).toString());
         compatibilityLabel.setText(candidate.getCompatibilityNote());
-        append("Selected: " + candidate.getDisplayName());
+        append("Selected model: " + candidate.getDisplayName());
         append("Note: " + candidate.getCompatibilityNote());
-    }
-
-    private void configureUrls() {
-        OllamaModelCandidate candidate = selectedCandidate();
-        ModelDownloadManifest manifest = effectiveManifest(candidate);
-        Window owner = SwingUtilities.getWindowAncestor(this);
-        DownloadUrlConfigDialog dialog = new DownloadUrlConfigDialog(owner, manifest);
-        dialog.setVisible(true);
-        if (dialog.isAccepted()) {
-            ModelDownloadManifest updatedManifest = manifest.withAllUrls(dialog.getEditedUrls());
-            overrideStore.storeOverrides(updatedManifest);
-            append("Stored URL overrides for " + updatedManifest.modelId());
-        }
     }
 
     private void configureAccess() {
@@ -172,7 +155,7 @@ public final class OllamaDownloadImportPanel extends JPanel {
             ModelDownloadManifest updatedManifest = manifest.withAllUrls(dialog.getEditedUrls());
             overrideStore.storeOverrides(updatedManifest);
             overrideStore.storeAccessSettings(updatedManifest.modelId(), dialog.getAccessSettings());
-            append("Stored URL/access settings for " + updatedManifest.modelId());
+            append("Stored Hugging Face access settings for " + updatedManifest.modelId());
         }
     }
 
@@ -186,9 +169,9 @@ public final class OllamaDownloadImportPanel extends JPanel {
         Path targetDir = targetDirectory(candidate);
         List<String> missing = ModelDownloader.missingRequiredFiles(manifest, targetDir);
         if (missing.isEmpty()) {
-            append("All required files are present: " + targetDir);
+            append("All required local files are present: " + targetDir);
         } else {
-            append("Missing required files: " + missing);
+            append("Missing local files: " + missing);
         }
     }
 
@@ -198,8 +181,8 @@ public final class OllamaDownloadImportPanel extends JPanel {
         final Path targetDir = targetDirectory(candidate);
         final boolean force = forceDownloadBox.isSelected();
         final DownloadAccessSettings accessSettings = overrideStore.accessSettings(manifest.modelId());
-        append("Downloading to " + targetDir);
-        setProgress(0, "Downloading");
+        append("Downloading model files to " + targetDir);
+        setProgress(0, "Downloading files");
 
         new SwingWorker<Void, Void>() {
             @Override
@@ -221,7 +204,7 @@ public final class OllamaDownloadImportPanel extends JPanel {
                     if (importAfterDownload) {
                         importSelectedModel();
                     } else {
-                        OllamaDownloadImportPanel.this.setProgress(100, "Download complete");
+                        OllamaDownloadImportPanel.this.setProgress(100, "Files downloaded");
                     }
                 } catch (Exception ex) {
                     append("ERROR: " + ex.getMessage());
@@ -240,12 +223,12 @@ public final class OllamaDownloadImportPanel extends JPanel {
             append("ERROR: Ollama model name is empty.");
             return;
         }
-        append("Importing " + targetDir + " as " + modelName);
-        append("Ollama: " + model.getOllamaBaseUrl());
+        append("Installing local files from " + targetDir + " as " + modelName);
+        append("Target AI server: " + model.getOllamaBaseUrl());
         if (!candidate.isRecommendedForSpike()) {
-            append("Warning: candidate is not the recommended small spike path: " + candidate.getCompatibilityNote());
+            append("Warning: this model is not marked as the safest install path: " + candidate.getCompatibilityNote());
         }
-        setProgress(0, "Importing");
+        setProgress(0, "Installing");
 
         new SwingWorker<String, Void>() {
             @Override
@@ -268,11 +251,11 @@ public final class OllamaDownloadImportPanel extends JPanel {
             @Override
             protected void done() {
                 try {
-                    append("Create result: " + get());
-                    OllamaDownloadImportPanel.this.setProgress(100, "Import complete");
+                    append("Install result: " + get());
+                    OllamaDownloadImportPanel.this.setProgress(100, "Installed");
                 } catch (Exception ex) {
                     append("ERROR: " + ex.getMessage());
-                    OllamaDownloadImportPanel.this.setProgress(0, "Import failed");
+                    OllamaDownloadImportPanel.this.setProgress(0, "Install failed");
                 }
             }
         }.execute();

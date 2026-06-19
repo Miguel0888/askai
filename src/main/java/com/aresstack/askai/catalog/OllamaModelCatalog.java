@@ -19,28 +19,28 @@ public final class OllamaModelCatalog {
     public static List<OllamaModelCandidate> candidates() {
         ArrayList<OllamaModelCandidate> candidates = new ArrayList<OllamaModelCandidate>();
         candidates.add(new OllamaModelCandidate(
-                "Gemma 3 270M IT SafeTensors (small spike candidate)",
-                ModelDownloadUrls.manifestForGemma3_270MInstruct(),
-                "gemma3-270m-it-safetensors:latest",
-                "Smallest existing Workbench SafeTensors candidate. Requires an Ollama version that supports Gemma 3 imports/runs.",
+                "Qwen2.5 Coder 0.5B Instruct SafeTensors (target)",
+                ModelDownloadUrls.manifestForQwenSafeTensors(),
+                "qwen2.5-coder-0.5b:latest",
+                "Small target model for the next product test. If Ollama accepts the import but generation stalls, try a GGUF route next.",
                 true));
+        candidates.add(new OllamaModelCandidate(
+                "Gemma 3 270M IT SafeTensors (small fallback)",
+                ModelDownloadUrls.manifestForGemma3_270MInstruct(),
+                "gemma3-270m-it:latest",
+                "Very small fallback for verifying download, upload, install and chat on weak CPU-only servers.",
+                false));
         candidates.add(new OllamaModelCandidate(
                 "Gemma 3 270M SafeTensors (base)",
                 ModelDownloadUrls.manifestForGemma3_270M(),
-                "gemma3-270m-safetensors:latest",
+                "gemma3-270m:latest",
                 "Small base model candidate. Chat quality is lower than the instruct variant.",
                 false));
         candidates.add(new OllamaModelCandidate(
-                "Phi-3 Mini 4K Instruct SafeTensors (large fallback)",
+                "Phi-3 Mini 4K Instruct SafeTensors (larger fallback)",
                 phi3Mini4kSafeTensors(),
-                "phi3-mini-4k-safetensors:latest",
-                "Officially closer to Ollama's documented Phi3 SafeTensors support, but much larger than Gemma 270M.",
-                false));
-        candidates.add(new OllamaModelCandidate(
-                "Qwen2.5 Coder 0.5B SafeTensors (negative/experimental)",
-                ModelDownloadUrls.manifestForQwenSafeTensors(),
-                "qwen2.5-coder-0.5b-safetensors:latest",
-                "Qwen is not listed in Ollama's direct SafeTensors import docs. Keep this for a negative spike or later GGUF route.",
+                "phi3-mini-4k:latest",
+                "Larger fallback model. It is more useful than tiny models but slower on CPU-only machines.",
                 false));
         return Collections.unmodifiableList(candidates);
     }
