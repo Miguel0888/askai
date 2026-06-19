@@ -1,4 +1,4 @@
-package com.aresstack.askai.client;
+﻿package com.aresstack.askai.client;
 
 import com.aresstack.askai.catalog.OllamaModelImportProfile;
 import com.aresstack.askai.util.JsonSupport;
@@ -234,3 +234,4 @@ public final class OllamaClient {
         return normalized;
     }
 }
+

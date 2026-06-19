@@ -1,4 +1,4 @@
-package com.aresstack.askai.util;
+﻿package com.aresstack.askai.util;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -137,6 +137,100 @@ public final class JsonSupport {
         return readJsonString(json, valueStart);
     }
 
+    public static List<String> extractArrayObjects(String json, String key) {
+        ArrayList<String> objects = new ArrayList<String>();
+        int arrayStart = findValueStart(json, key, '[');
+        if (arrayStart < 0) {
+            return objects;
+        }
+        int index = arrayStart + 1;
+        while (index < json.length()) {
+            char ch = json.charAt(index);
+            if (ch == ']') {
+                return objects;
+            }
+            if (ch == '{') {
+                int objectEnd = findMatchingEnd(json, index, '{', '}');
+                if (objectEnd < 0) {
+                    return objects;
+                }
+                objects.add(json.substring(index, objectEnd + 1));
+                index = objectEnd + 1;
+            } else {
+                index++;
+            }
+        }
+        return objects;
+    }
+
+    public static String extractObjectValue(String json, String key) {
+        int objectStart = findValueStart(json, key, '{');
+        if (objectStart < 0) {
+            return ;
+        }
+        int objectEnd = findMatchingEnd(json, objectStart, '{', '}');
+        if (objectEnd < 0) {
+            return ;
+        }
+        return json.substring(objectStart, objectEnd + 1);
+    }
+
+    public static long extractFirstLongValue(String json, String key) {
+        String number = extractFirstNumberValue(json, key);
+        if (number.isEmpty()) {
+            return 0L;
+        }
+        try {
+            return Long.parseLong(number);
+        } catch (NumberFormatException ignored) {
+            return 0L;
+        }
+    }
+
+    private static int findValueStart(String json, String key, char expectedStart) {
+        if (json == null || key == null) {
+            return -1;
+        }
+        String marker = " + key + ";
+        int keyIndex = json.indexOf(marker);
+        if (keyIndex < 0) {
+            return -1;
+        }
+        int colonIndex = json.indexOf(':', keyIndex + marker.length());
+        if (colonIndex < 0) {
+            return -1;
+        }
+        int valueStart = skipWhitespace(json, colonIndex + 1);
+        if (valueStart >= json.length() || json.charAt(valueStart) != expectedStart) {
+            return -1;
+        }
+        return valueStart;
+    }
+
+    private static int findMatchingEnd(String json, int start, char open, char close) {
+        int depth = 0;
+        boolean inString = false;
+        boolean escaped = false;
+        for (int i = start; i < json.length(); i++) {
+            char ch = json.charAt(i);
+            if (inString) {
+                if (escaped) {
+                    escaped = false;
+                } else if (ch == '\\') {
+                    escaped = true;
+                } else if (ch == '') { inString = false; } continue; } if (ch == '') {
+                inString = true;
+            } else if (ch == open) {
+                depth++;
+            } else if (ch == close) {
+                depth--;
+                if (depth == 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
     private static int skipWhitespace(String text, int start) {
         int index = start;
         while (index < text.length() && Character.isWhitespace(text.charAt(index))) {
@@ -213,3 +307,4 @@ public final class JsonSupport {
         return readJsonString("\"" + value + "\"", 0);
     }
 }
+

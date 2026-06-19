@@ -1,4 +1,4 @@
-package com.aresstack.askai.ui;
+﻿package com.aresstack.askai.ui;
 
 import com.aresstack.askai.AskAiModel;
 
@@ -18,24 +18,26 @@ import java.awt.Dimension;
  */
 public final class AskAiFrame extends JFrame {
 
-    private static final String CHAT_VIEW = "chat";
-    private static final String MODELS_VIEW = "models";
-    private static final String INSTALL_VIEW = "install";
-    private static final String CONNECTIONS_VIEW = "connections";
-    private static final String NETWORK_VIEW = "network";
-    private static final String ABOUT_VIEW = "about";
+    private static final String CHAT_VIEW = chat;
+    private static final String MODELS_VIEW = models;
+    private static final String INSTALL_VIEW = install;
+    private static final String CONNECTIONS_VIEW = connections;
+    private static final String NETWORK_VIEW = network;
+    private static final String ABOUT_VIEW = about;
 
     private final AskAiModel model;
     private final JLabel connectionStatusLabel;
     private final CardLayout contentLayout;
     private final JPanel contentPanel;
+    private final OllamaModelsPanel modelsPanel;
 
     public AskAiFrame() {
-        super("AskAI");
+        super(AskAI);
         this.model = new AskAiModel();
         this.connectionStatusLabel = new JLabel();
         this.contentLayout = new CardLayout();
         this.contentPanel = new JPanel(contentLayout);
+        this.modelsPanel = new OllamaModelsPanel(model);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setSize(1180, 820);
         setMinimumSize(new Dimension(980, 680));
@@ -52,7 +54,8 @@ public final class AskAiFrame extends JFrame {
 
     private JMenuBar createMenuBar() {
         JMenuBar menuBar = new JMenuBar();
-        menuBar.add(createChatMenu());
+        menuBar.add(createTopLevelItem(Chat, CHAT_VIEW));
+        menuBar.add(createTopLevelItem(Models, MODELS_VIEW));
         menuBar.add(createConfigurationMenu());
         menuBar.add(createHelpMenu());
         menuBar.add(Box.createHorizontalGlue());
@@ -61,24 +64,23 @@ public final class AskAiFrame extends JFrame {
         return menuBar;
     }
 
-    private JMenu createChatMenu() {
-        JMenu chatMenu = new JMenu("Chat");
-        chatMenu.add(createScreenItem("Chat", CHAT_VIEW));
-        return chatMenu;
+    private JMenuItem createTopLevelItem(String title, String screenName) {
+        JMenuItem item = new JMenuItem(title);
+        item.addActionListener(event -> showScreen(screenName));
+        return item;
     }
 
     private JMenu createConfigurationMenu() {
-        JMenu configurationMenu = new JMenu("Configuration");
-        configurationMenu.add(createScreenItem("Models", MODELS_VIEW));
-        configurationMenu.add(createScreenItem("Install", INSTALL_VIEW));
-        configurationMenu.add(createScreenItem("Connections", CONNECTIONS_VIEW));
-        configurationMenu.add(createScreenItem("Network", NETWORK_VIEW));
+        JMenu configurationMenu = new JMenu(Configuration);
+        configurationMenu.add(createScreenItem(Install, INSTALL_VIEW));
+        configurationMenu.add(createScreenItem(Connections, CONNECTIONS_VIEW));
+        configurationMenu.add(createScreenItem(Network, NETWORK_VIEW));
         return configurationMenu;
     }
 
     private JMenu createHelpMenu() {
-        JMenu helpMenu = new JMenu("Help");
-        helpMenu.add(createScreenItem("About", ABOUT_VIEW));
+        JMenu helpMenu = new JMenu(Help);
+        helpMenu.add(createScreenItem(About, ABOUT_VIEW));
         return helpMenu;
     }
 
@@ -90,7 +92,7 @@ public final class AskAiFrame extends JFrame {
 
     private JPanel createContentPanel() {
         contentPanel.add(new OllamaChatPanel(model), CHAT_VIEW);
-        contentPanel.add(new OllamaModelsPanel(model), MODELS_VIEW);
+        contentPanel.add(modelsPanel, MODELS_VIEW);
         contentPanel.add(new OllamaDownloadImportPanel(model), INSTALL_VIEW);
         contentPanel.add(new OllamaConfigPanel(model), CONNECTIONS_VIEW);
         contentPanel.add(new ProxyPanel(model), NETWORK_VIEW);
@@ -100,32 +102,35 @@ public final class AskAiFrame extends JFrame {
 
     private void showScreen(String screenName) {
         contentLayout.show(contentPanel, screenName);
+        if (MODELS_VIEW.equals(screenName)) {
+            modelsPanel.onShown();
+        }
         refreshConnectionStatus(screenName);
     }
 
     private void refreshConnectionStatus(String screenName) {
-        connectionStatusLabel.setText("Ollama - " + model.getOllamaBaseUrl() + " - " + resolveScreenTitle(screenName));
+        connectionStatusLabel.setText(Ollama -  + model.getOllamaBaseUrl() +  -  + resolveScreenTitle(screenName));
     }
 
     private String resolveScreenTitle(String screenName) {
         if (CHAT_VIEW.equals(screenName)) {
-            return "Chat";
+            return Chat;
         }
         if (MODELS_VIEW.equals(screenName)) {
-            return "Models";
+            return Models;
         }
         if (INSTALL_VIEW.equals(screenName)) {
-            return "Install";
+            return Install;
         }
         if (CONNECTIONS_VIEW.equals(screenName)) {
-            return "Connections";
+            return Connections;
         }
         if (NETWORK_VIEW.equals(screenName)) {
-            return "Network";
+            return Network;
         }
         if (ABOUT_VIEW.equals(screenName)) {
-            return "About";
+            return About;
         }
-        return "AskAI";
+        return AskAI;
     }
 }
