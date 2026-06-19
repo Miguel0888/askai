@@ -1,5 +1,6 @@
 package com.aresstack.askai.client;
 
+import com.aresstack.askai.catalog.OllamaModelImportProfile;
 import com.aresstack.askai.util.JsonSupport;
 
 import java.io.BufferedReader;
@@ -133,32 +134,17 @@ public final class OllamaClient {
         sendText(request);
     }
 
-    public String createModelFromFiles(String modelName, Map<String, String> digestByRelativePath, String quantization)
+    public String createModelFromFiles(String modelName, Map<String, String> digestByRelativePath, String quantization,
+                                       OllamaModelImportProfile importProfile)
             throws OllamaRequestException {
-        StringBuilder builder = new StringBuilder();
-        builder.append("{\"model\":").append(JsonSupport.quote(modelName));
-        builder.append(",\"stream\":false");
-        builder.append(",\"files\":{");
-        boolean first = true;
-        for (Map.Entry<String, String> entry : digestByRelativePath.entrySet()) {
-            if (!first) {
-                builder.append(',');
-            }
-            first = false;
-            builder.append(JsonSupport.quote(entry.getKey()))
-                    .append(':')
-                    .append(JsonSupport.quote("sha256:" + entry.getValue()));
-        }
-        builder.append('}');
-        if (quantization != null && !quantization.trim().isEmpty() && !"none".equalsIgnoreCase(quantization.trim())) {
-            builder.append(",\"quantize\":").append(JsonSupport.quote(quantization.trim()));
-        }
-        builder.append('}');
+        return createModel(new OllamaCreateModelRequest(modelName, digestByRelativePath, quantization, importProfile));
+    }
 
+    public String createModel(OllamaCreateModelRequest createRequest) throws OllamaRequestException {
         HttpRequest request = HttpRequest.newBuilder(endpoint("/api/create"))
                 .timeout(Duration.ofHours(6))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(builder.toString()))
+                .POST(HttpRequest.BodyPublishers.ofString(createRequest.toJson()))
                 .build();
         return sendText(request);
     }
