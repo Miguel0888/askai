@@ -125,7 +125,7 @@ public final class OllamaClient {
         }
     }
 
-    public void uploadBlob(String digest, Path file) throws OllamaRequestException {
+    public void uploadBlob(String digest, Path file) throws IOException, OllamaRequestException {
         HttpRequest request = HttpRequest.newBuilder(endpoint("/api/blobs/sha256:" + digest))
                 .timeout(Duration.ofHours(12))
                 .POST(HttpRequest.BodyPublishers.ofFile(file))
