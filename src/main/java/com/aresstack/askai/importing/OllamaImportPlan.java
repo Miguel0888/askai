@@ -13,13 +13,20 @@ public final class OllamaImportPlan {
     private final String ollamaModelName;
     private final String quantization;
     private final OllamaModelImportProfile importProfile;
+    private final AskAiModelInstallation installation;
 
     public OllamaImportPlan(Path modelDirectory, String ollamaModelName, String quantization,
                             OllamaModelImportProfile importProfile) {
+        this(modelDirectory, ollamaModelName, quantization, importProfile, null);
+    }
+
+    public OllamaImportPlan(Path modelDirectory, String ollamaModelName, String quantization,
+                            OllamaModelImportProfile importProfile, AskAiModelInstallation installation) {
         this.modelDirectory = modelDirectory;
         this.ollamaModelName = ollamaModelName;
         this.quantization = quantization == null ? "" : quantization.trim();
         this.importProfile = importProfile == null ? OllamaModelImportProfile.plain() : importProfile;
+        this.installation = installation;
     }
 
     public Path getModelDirectory() {
@@ -36,5 +43,13 @@ public final class OllamaImportPlan {
 
     public OllamaModelImportProfile getImportProfile() {
         return importProfile;
+    }
+
+    public AskAiModelInstallation getInstallation() {
+        return installation;
+    }
+
+    public boolean hasManagedInstallation() {
+        return installation != null;
     }
 }

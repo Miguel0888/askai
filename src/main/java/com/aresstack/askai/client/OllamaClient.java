@@ -137,48 +137,16 @@ public final class OllamaClient {
     public String createModelFromFiles(String modelName, Map<String, String> digestByRelativePath, String quantization,
                                        OllamaModelImportProfile importProfile)
             throws OllamaRequestException {
-        StringBuilder builder = new StringBuilder();
-        builder.append("{\"model\":").append(JsonSupport.quote(modelName));
-        builder.append(",\"stream\":false");
-        builder.append(",\"files\":{");
-        boolean first = true;
-        for (Map.Entry<String, String> entry : digestByRelativePath.entrySet()) {
-            if (!first) {
-                builder.append(',');
-            }
-            first = false;
-            builder.append(JsonSupport.quote(entry.getKey()))
-                    .append(':')
-                    .append(JsonSupport.quote("sha256:" + entry.getValue()));
-        }
-        builder.append('}');
-        if (quantization != null && !quantization.trim().isEmpty() && !"none".equalsIgnoreCase(quantization.trim())) {
-            builder.append(",\"quantize\":").append(JsonSupport.quote(quantization.trim()));
-        }
-        appendImportProfile(builder, importProfile);
-        builder.append('}');
+        return createModel(new OllamaCreateModelRequest(modelName, digestByRelativePath, quantization, importProfile));
+    }
 
+    public String createModel(OllamaCreateModelRequest createRequest) throws OllamaRequestException {
         HttpRequest request = HttpRequest.newBuilder(endpoint("/api/create"))
                 .timeout(Duration.ofHours(6))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(builder.toString()))
+                .POST(HttpRequest.BodyPublishers.ofString(createRequest.toJson()))
                 .build();
         return sendText(request);
-    }
-
-    private static void appendImportProfile(StringBuilder builder, OllamaModelImportProfile importProfile) {
-        if (importProfile == null) {
-            return;
-        }
-        if (importProfile.hasTemplate()) {
-            builder.append(",\"template\":").append(JsonSupport.quote(importProfile.getTemplate()));
-        }
-        if (importProfile.hasSystemPrompt()) {
-            builder.append(",\"system\":").append(JsonSupport.quote(importProfile.getSystemPrompt()));
-        }
-        if (importProfile.hasParametersJson()) {
-            builder.append(",\"parameters\":").append(importProfile.getParametersJson());
-        }
     }
 
     private String sendText(HttpRequest request) throws OllamaRequestException {

@@ -30,6 +30,6 @@ public final class AskAiPaths {
     }
 
     public static Path defaultModelRoot() {
-        return appDirectory().resolve("model");
+        return appDirectory().resolve("models");
     }
 }
