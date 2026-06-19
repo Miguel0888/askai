@@ -2,45 +2,41 @@ package com.aresstack.askai.client;
 
 import com.aresstack.askai.util.JsonSupport;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Thin HTTP client for the local/remote Ollama API.
+ * Small Ollama HTTP client used by the Swing app.
  */
 public final class OllamaClient {
 
-    private final HttpClient httpClient;
     private final String baseUrl;
+    private final HttpClient httpClient;
 
     public OllamaClient(String baseUrl) {
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .build();
         this.baseUrl = normalizeBaseUrl(baseUrl);
-    }
-
-    public String getVersion() throws OllamaRequestException {
-        return sendText(HttpRequest.newBuilder(endpoint("/api/version"))
-                .timeout(Duration.ofSeconds(15))
-                .GET()
-                .build());
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(20))
+                .build();
     }
 
     public String getTagsJson() throws OllamaRequestException {
-        return sendText(HttpRequest.newBuilder(endpoint("/api/tags"))
-                .timeout(Duration.ofSeconds(30))
+        HttpRequest request = HttpRequest.newBuilder(endpoint("/api/tags"))
+                .timeout(Duration.ofMinutes(2))
                 .GET()
-                .build());
+                .build();
+        return sendText(request);
     }
 
     public List<String> getModelNames() throws OllamaRequestException {
@@ -48,15 +44,68 @@ public final class OllamaClient {
     }
 
     public String getRunningModelsJson() throws OllamaRequestException {
-        return sendText(HttpRequest.newBuilder(endpoint("/api/ps"))
-                .timeout(Duration.ofSeconds(30))
+        HttpRequest request = HttpRequest.newBuilder(endpoint("/api/ps"))
+                .timeout(Duration.ofMinutes(2))
                 .GET()
-                .build());
+                .build();
+        return sendText(request);
+    }
+
+    public String getVersion() throws OllamaRequestException {
+        HttpRequest request = HttpRequest.newBuilder(endpoint("/api/version"))
+                .timeout(Duration.ofMinutes(2))
+                .GET()
+                .build();
+        return sendText(request);
+    }
+
+    public String deleteModel(String modelName) throws OllamaRequestException {
+        String body = "{\"model\":" + JsonSupport.quote(modelName) + "}";
+        HttpRequest request = HttpRequest.newBuilder(endpoint("/api/delete"))
+                .timeout(Duration.ofMinutes(10))
+                .header("Content-Type", "application/json")
+                .method("DELETE", HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        return sendText(request);
+    }
+
+    public String chat(String modelName, String systemPrompt, String userPrompt, String keepAlive)
+            throws OllamaRequestException {
+        String body = chatJson(modelName, systemPrompt, userPrompt, keepAlive, false);
+        HttpRequest request = HttpRequest.newBuilder(endpoint("/api/chat"))
+                .timeout(Duration.ofHours(6))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        return sendText(request);
+    }
+
+    public void streamChat(String modelName, String systemPrompt, String userPrompt, String keepAlive,
+                           OllamaChatStreamListener listener) throws OllamaRequestException {
+        String body = chatJson(modelName, systemPrompt, userPrompt, keepAlive, true);
+        HttpRequest request = HttpRequest.newBuilder(endpoint("/api/chat"))
+                .timeout(Duration.ofHours(6))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        try {
+            HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                String responseBody = readAll(response.body());
+                throw new OllamaRequestException("HTTP " + response.statusCode() + ": " + responseBody);
+            }
+            readChatStream(response.body(), listener);
+        } catch (IOException ex) {
+            throw new OllamaRequestException("Chat stream failed: " + ex.getMessage(), ex);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new OllamaRequestException("Chat stream interrupted", ex);
+        }
     }
 
     public boolean blobExists(String digest) throws OllamaRequestException {
-        HttpRequest request = HttpRequest.newBuilder(endpoint("/api/blobs/" + digest))
-                .timeout(Duration.ofSeconds(30))
+        HttpRequest request = HttpRequest.newBuilder(endpoint("/api/blobs/sha256:" + digest))
+                .timeout(Duration.ofMinutes(2))
                 .method("HEAD", HttpRequest.BodyPublishers.noBody())
                 .build();
         try {
@@ -67,57 +116,49 @@ public final class OllamaClient {
             if (response.statusCode() == 404) {
                 return false;
             }
-            throw new OllamaRequestException("Blob HEAD failed with HTTP " + response.statusCode());
+            throw new OllamaRequestException("Blob check failed: HTTP " + response.statusCode());
         } catch (IOException ex) {
-            throw new OllamaRequestException("Blob HEAD failed: " + ex.getMessage(), ex);
+            throw new OllamaRequestException("Blob check failed: " + ex.getMessage(), ex);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new OllamaRequestException("Blob HEAD interrupted", ex);
+            throw new OllamaRequestException("Blob check interrupted", ex);
         }
     }
 
-    public String uploadBlob(String digest, Path file) throws OllamaRequestException {
-        HttpRequest.BodyPublisher bodyPublisher;
-        try {
-            bodyPublisher = HttpRequest.BodyPublishers.ofFile(file);
-        } catch (java.io.FileNotFoundException ex) {
-            throw new OllamaRequestException("Blob file not found: " + file, ex);
-        }
-        HttpRequest request = HttpRequest.newBuilder(endpoint("/api/blobs/" + digest))
-                .timeout(Duration.ofHours(6))
-                .POST(bodyPublisher)
+    public void uploadBlob(String digest, Path file) throws OllamaRequestException {
+        HttpRequest request = HttpRequest.newBuilder(endpoint("/api/blobs/sha256:" + digest))
+                .timeout(Duration.ofHours(12))
+                .POST(HttpRequest.BodyPublishers.ofFile(file))
                 .build();
-        return sendText(request);
+        sendText(request);
     }
 
-    public String createModelFromFiles(String modelName, Map<String, String> files,
-                                       String quantization) throws OllamaRequestException {
-        String body = createModelJson(modelName, files, quantization);
+    public String createModelFromFiles(String modelName, Map<String, String> digestByRelativePath, String quantization)
+            throws OllamaRequestException {
+        StringBuilder builder = new StringBuilder();
+        builder.append("{\"model\":").append(JsonSupport.quote(modelName));
+        builder.append(",\"stream\":false");
+        builder.append(",\"files\":{");
+        boolean first = true;
+        for (Map.Entry<String, String> entry : digestByRelativePath.entrySet()) {
+            if (!first) {
+                builder.append(',');
+            }
+            first = false;
+            builder.append(JsonSupport.quote(entry.getKey()))
+                    .append(':')
+                    .append(JsonSupport.quote("sha256:" + entry.getValue()));
+        }
+        builder.append('}');
+        if (quantization != null && !quantization.trim().isEmpty() && !"none".equalsIgnoreCase(quantization.trim())) {
+            builder.append(",\"quantize\":").append(JsonSupport.quote(quantization.trim()));
+        }
+        builder.append('}');
+
         HttpRequest request = HttpRequest.newBuilder(endpoint("/api/create"))
                 .timeout(Duration.ofHours(6))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
-        return sendText(request);
-    }
-
-    public String deleteModel(String modelName) throws OllamaRequestException {
-        String body = "{\"model\":" + JsonSupport.quote(modelName) + "}";
-        HttpRequest request = HttpRequest.newBuilder(endpoint("/api/delete"))
-                .timeout(Duration.ofMinutes(2))
-                .header("Content-Type", "application/json")
-                .method("DELETE", HttpRequest.BodyPublishers.ofString(body))
-                .build();
-        return sendText(request);
-    }
-
-    public String chat(String modelName, String systemPrompt, String userPrompt, String keepAlive)
-            throws OllamaRequestException {
-        String body = chatJson(modelName, systemPrompt, userPrompt, keepAlive);
-        HttpRequest request = HttpRequest.newBuilder(endpoint("/api/chat"))
-                .timeout(Duration.ofMinutes(30))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .POST(HttpRequest.BodyPublishers.ofString(builder.toString()))
                 .build();
         return sendText(request);
     }
@@ -130,71 +171,80 @@ public final class OllamaClient {
             }
             throw new OllamaRequestException("HTTP " + response.statusCode() + ": " + response.body());
         } catch (IOException ex) {
-            throw new OllamaRequestException("HTTP request failed: " + ex.getMessage(), ex);
+            throw new OllamaRequestException("Request failed: " + ex.getMessage(), ex);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new OllamaRequestException("HTTP request interrupted", ex);
+            throw new OllamaRequestException("Request interrupted", ex);
         }
+    }
+
+    private static String chatJson(String modelName, String systemPrompt, String userPrompt, String keepAlive, boolean stream) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("{\"model\":").append(JsonSupport.quote(modelName));
+        builder.append(",\"messages\":[");
+        boolean hasSystem = systemPrompt != null && !systemPrompt.trim().isEmpty();
+        if (hasSystem) {
+            builder.append("{\"role\":\"system\",\"content\":")
+                    .append(JsonSupport.quote(systemPrompt))
+                    .append("},");
+        }
+        builder.append("{\"role\":\"user\",\"content\":")
+                .append(JsonSupport.quote(userPrompt))
+                .append("}");
+        builder.append("],\"stream\":").append(stream ? "true" : "false");
+        if (keepAlive != null && !keepAlive.trim().isEmpty()) {
+            builder.append(",\"keep_alive\":").append(JsonSupport.quote(keepAlive.trim()));
+        }
+        builder.append('}');
+        return builder.toString();
+    }
+
+    private void readChatStream(InputStream inputStream, OllamaChatStreamListener listener) throws IOException {
+        String finalLine = "";
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (Thread.currentThread().isInterrupted()) {
+                    listener.onStatus("Chat request was cancelled.");
+                    return;
+                }
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+                finalLine = line;
+                String content = JsonSupport.extractChatMessageContent(line);
+                if (!content.isEmpty()) {
+                    listener.onContent(content);
+                }
+                if (line.contains("\"done\":true")) {
+                    listener.onComplete(line);
+                    return;
+                }
+            }
+        }
+        listener.onComplete(finalLine);
+    }
+
+    private static String readAll(InputStream inputStream) throws IOException {
+        StringBuilder builder = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                builder.append(line).append(System.lineSeparator());
+            }
+        }
+        return builder.toString();
     }
 
     private URI endpoint(String path) {
         return URI.create(baseUrl + path);
     }
 
-    private static String normalizeBaseUrl(String value) {
-        String normalized = value == null ? "" : value.trim();
-        if (normalized.isEmpty()) {
-            normalized = "http://127.0.0.1:11434";
-        }
+    private static String normalizeBaseUrl(String url) {
+        String normalized = url == null || url.trim().isEmpty() ? "http://127.0.0.1:11434" : url.trim();
         while (normalized.endsWith("/")) {
             normalized = normalized.substring(0, normalized.length() - 1);
         }
         return normalized;
-    }
-
-    private static String createModelJson(String modelName, Map<String, String> files, String quantization) {
-        LinkedHashMap<String, String> stableFiles = new LinkedHashMap<String, String>(files);
-        StringBuilder builder = new StringBuilder(256 + stableFiles.size() * 96);
-        builder.append('{');
-        builder.append("\"model\":").append(JsonSupport.quote(modelName));
-        builder.append(",\"files\":{");
-        boolean first = true;
-        for (Map.Entry<String, String> entry : stableFiles.entrySet()) {
-            if (!first) {
-                builder.append(',');
-            }
-            builder.append(JsonSupport.quote(entry.getKey())).append(':').append(JsonSupport.quote(entry.getValue()));
-            first = false;
-        }
-        builder.append('}');
-        String cleanQuantization = quantization == null ? "" : quantization.trim();
-        if (!cleanQuantization.isEmpty()) {
-            builder.append(",\"quantize\":").append(JsonSupport.quote(cleanQuantization));
-        }
-        builder.append(",\"stream\":false");
-        builder.append('}');
-        return builder.toString();
-    }
-
-    private static String chatJson(String modelName, String systemPrompt, String userPrompt, String keepAlive) {
-        StringBuilder builder = new StringBuilder(512);
-        builder.append('{');
-        builder.append("\"model\":").append(JsonSupport.quote(modelName)).append(',');
-        builder.append("\"messages\":[");
-        String cleanSystem = systemPrompt == null ? "" : systemPrompt.trim();
-        boolean hasSystem = !cleanSystem.isEmpty();
-        if (hasSystem) {
-            builder.append("{\"role\":\"system\",\"content\":")
-                    .append(JsonSupport.quote(cleanSystem)).append("},");
-        }
-        builder.append("{\"role\":\"user\",\"content\":")
-                .append(JsonSupport.quote(userPrompt)).append("}");
-        builder.append("],\"stream\":false");
-        String cleanKeepAlive = keepAlive == null ? "" : keepAlive.trim();
-        if (!cleanKeepAlive.isEmpty()) {
-            builder.append(",\"keep_alive\":").append(JsonSupport.quote(cleanKeepAlive));
-        }
-        builder.append('}');
-        return builder.toString();
     }
 }
