@@ -3,16 +3,12 @@ package com.aresstack.askai.ui;
 import com.aresstack.askai.AskAiModel;
 
 import javax.swing.BorderFactory;
-import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JTabbedPane;
 import java.awt.BorderLayout;
-import java.awt.CardLayout;
 import java.awt.Dimension;
-import java.awt.GridLayout;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 /**
  * Main frame for provider-based AI chat and model installation.
@@ -20,31 +16,26 @@ import java.util.Map;
 public final class AskAiFrame extends JFrame {
 
     private final AskAiModel model;
-    private final CardLayout cardLayout;
-    private final JPanel cards;
     private final JLabel statusLabel;
-    private final Map<String, JButton> navigationButtons;
+    private final JTabbedPane tabs;
 
     public AskAiFrame() {
         super("AskAI");
         this.model = new AskAiModel();
-        this.cardLayout = new CardLayout();
-        this.cards = new JPanel(cardLayout);
         this.statusLabel = new JLabel();
-        this.navigationButtons = new LinkedHashMap<String, JButton>();
+        this.tabs = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.SCROLL_TAB_LAYOUT);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setSize(1180, 820);
         setMinimumSize(new Dimension(980, 680));
         setLocationRelativeTo(null);
         buildUserInterface();
-        showScreen("Chat");
+        updateStatus("Chat");
     }
 
     private void buildUserInterface() {
         getContentPane().setLayout(new BorderLayout());
         getContentPane().add(createHeader(), BorderLayout.NORTH);
-        getContentPane().add(createNavigation(), BorderLayout.WEST);
-        getContentPane().add(createCards(), BorderLayout.CENTER);
+        getContentPane().add(createTabs(), BorderLayout.CENTER);
     }
 
     private JPanel createHeader() {
@@ -58,41 +49,23 @@ public final class AskAiFrame extends JFrame {
         return header;
     }
 
-    private JPanel createNavigation() {
-        JPanel navigation = new JPanel(new GridLayout(0, 1, 0, 4));
-        navigation.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-        navigation.setPreferredSize(new Dimension(150, 1));
-        addNavigationButton(navigation, "Chat");
-        addNavigationButton(navigation, "Models");
-        addNavigationButton(navigation, "Install");
-        addNavigationButton(navigation, "Connections");
-        addNavigationButton(navigation, "Network");
-        addNavigationButton(navigation, "About");
-        return navigation;
+    private JTabbedPane createTabs() {
+        tabs.addTab("Chat", new OllamaChatPanel(model));
+        tabs.addTab("Models", new OllamaModelsPanel(model));
+        tabs.addTab("Install", new OllamaDownloadImportPanel(model));
+        tabs.addTab("Connections", new OllamaConfigPanel(model));
+        tabs.addTab("Network", new ProxyPanel(model));
+        tabs.addTab("About", new OllamaAboutPanel());
+        tabs.addChangeListener(event -> {
+            int selectedIndex = tabs.getSelectedIndex();
+            if (selectedIndex >= 0) {
+                updateStatus(tabs.getTitleAt(selectedIndex));
+            }
+        });
+        return tabs;
     }
 
-    private void addNavigationButton(JPanel navigation, final String screenName) {
-        JButton button = new JButton(screenName);
-        button.addActionListener(event -> showScreen(screenName));
-        navigationButtons.put(screenName, button);
-        navigation.add(button);
-    }
-
-    private JPanel createCards() {
-        cards.add(new OllamaChatPanel(model), "Chat");
-        cards.add(new OllamaModelsPanel(model), "Models");
-        cards.add(new OllamaDownloadImportPanel(model), "Install");
-        cards.add(new OllamaConfigPanel(model), "Connections");
-        cards.add(new ProxyPanel(model), "Network");
-        cards.add(new OllamaAboutPanel(), "About");
-        return cards;
-    }
-
-    private void showScreen(String screenName) {
-        cardLayout.show(cards, screenName);
-        for (Map.Entry<String, JButton> entry : navigationButtons.entrySet()) {
-            entry.getValue().setEnabled(!entry.getKey().equals(screenName));
-        }
+    private void updateStatus(String screenName) {
         statusLabel.setText("Ollama · " + model.getOllamaBaseUrl() + " · " + screenName);
     }
 }
