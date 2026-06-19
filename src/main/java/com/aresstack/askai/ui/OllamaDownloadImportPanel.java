@@ -4,6 +4,8 @@ import com.aresstack.askai.AskAiModel;
 import com.aresstack.askai.catalog.OllamaModelCandidate;
 import com.aresstack.askai.catalog.OllamaModelCatalog;
 import com.aresstack.askai.client.OllamaClient;
+import com.aresstack.askai.importing.AskAiModelInstallation;
+import com.aresstack.askai.importing.AskAiModelStore;
 import com.aresstack.askai.importing.OllamaImportListener;
 import com.aresstack.askai.importing.OllamaImportPlan;
 import com.aresstack.askai.importing.OllamaImportUseCase;
@@ -33,7 +35,6 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Window;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -44,6 +45,7 @@ public final class OllamaDownloadImportPanel extends JPanel {
 
     private final AskAiModel model;
     private final DownloadOverrideStore overrideStore;
+    private final AskAiModelStore modelStore;
     private final JComboBox<OllamaModelCandidate> candidateCombo;
     private final JTextField targetModelNameField;
     private final JTextField quantizationField;
@@ -56,6 +58,7 @@ public final class OllamaDownloadImportPanel extends JPanel {
     public OllamaDownloadImportPanel(AskAiModel model) {
         this.model = model;
         this.overrideStore = new DownloadOverrideStore(AskAiPaths.downloadOverridesFile());
+        this.modelStore = new AskAiModelStore();
         this.overrideStore.load();
         this.candidateCombo = new JComboBox<OllamaModelCandidate>(
                 OllamaModelCatalog.candidates().toArray(new OllamaModelCandidate[0]));
@@ -138,7 +141,7 @@ public final class OllamaDownloadImportPanel extends JPanel {
             return;
         }
         targetModelNameField.setText(candidate.getDefaultOllamaModelName());
-        localFolderLabel.setText(targetDirectory(candidate).toString());
+        localFolderLabel.setText(installationFor(candidate).getRootDirectory().toString());
         compatibilityLabel.setText(candidate.getCompatibilityNote());
         append("Selected model: " + candidate.getDisplayName());
         append("Note: " + candidate.getCompatibilityNote());
@@ -161,13 +164,14 @@ public final class OllamaDownloadImportPanel extends JPanel {
     }
 
     private void openFolder() {
-        DownloadFolderOpener.openFolder(targetDirectory(selectedCandidate()), this::append);
+        DownloadFolderOpener.openFolder(installationFor(selectedCandidate()).getRootDirectory(), this::append);
     }
 
     private void validateLocalFiles() {
         OllamaModelCandidate candidate = selectedCandidate();
         ModelDownloadManifest manifest = effectiveManifest(candidate);
-        Path targetDir = targetDirectory(candidate);
+        AskAiModelInstallation installation = installationFor(candidate);
+        Path targetDir = installation.getSourceDirectory();
         List<String> missing = ModelDownloader.missingRequiredFiles(manifest, targetDir);
         if (missing.isEmpty()) {
             append("All required local files are present: " + targetDir);
@@ -179,16 +183,18 @@ public final class OllamaDownloadImportPanel extends JPanel {
     private void downloadSelectedModel(final boolean importAfterDownload) {
         final OllamaModelCandidate candidate = selectedCandidate();
         final ModelDownloadManifest manifest = effectiveManifest(candidate);
-        final Path targetDir = targetDirectory(candidate);
+        final AskAiModelInstallation installation = installationFor(candidate);
+        final Path targetDir = installation.getSourceDirectory();
         final boolean force = forceDownloadBox.isSelected();
         final DownloadAccessSettings accessSettings = overrideStore.accessSettings(manifest.modelId());
-        append("Downloading model files to " + targetDir);
+        append("Preparing AskAI model folder " + installation.getRootDirectory());
+        append("Downloading model source files to " + targetDir);
         setProgress(0, "Downloading files");
 
         new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() throws Exception {
-                Files.createDirectories(targetDir);
+                modelStore.prepareInstallation(installation);
                 ModelDownloader.downloadFromManifest(manifest, targetDir, force,
                         OllamaDownloadImportPanel.this::append,
                         event -> OllamaDownloadImportPanel.this.setProgress(event.aggregatePercent(), event.localFilename()),
@@ -217,7 +223,8 @@ public final class OllamaDownloadImportPanel extends JPanel {
 
     private void importSelectedModel() {
         final OllamaModelCandidate candidate = selectedCandidate();
-        final Path targetDir = targetDirectory(candidate);
+        final AskAiModelInstallation installation = installationFor(candidate);
+        final Path targetDir = installation.getSourceDirectory();
         final String modelName = targetModelNameField.getText().trim();
         final String quantization = quantizationField.getText().trim();
         if (modelName.isEmpty()) {
@@ -225,6 +232,8 @@ public final class OllamaDownloadImportPanel extends JPanel {
             return;
         }
         append("Installing local files from " + targetDir + " as " + modelName);
+        append("AskAI model folder: " + installation.getRootDirectory());
+        append("Ollama artifacts folder: " + installation.getOllamaDirectory());
         append("Target AI server: " + model.getOllamaBaseUrl());
         if (!candidate.isRecommendedForSpike()) {
             append("Warning: this model is not marked as the safest install path: " + candidate.getCompatibilityNote());
@@ -236,7 +245,7 @@ public final class OllamaDownloadImportPanel extends JPanel {
             protected String doInBackground() throws Exception {
                 OllamaImportUseCase useCase = new OllamaImportUseCase(new OllamaClient(model.getOllamaBaseUrl()));
                 OllamaImportPlan plan = new OllamaImportPlan(targetDir, modelName, quantization,
-                        candidate.getImportProfile());
+                        candidate.getImportProfile(), installation);
                 return useCase.execute(plan, new OllamaImportListener() {
                     @Override
                     public void onMessage(String message) {
@@ -271,8 +280,8 @@ public final class OllamaDownloadImportPanel extends JPanel {
         return overrideStore.applyOverrides(candidate.getManifest());
     }
 
-    private Path targetDirectory(OllamaModelCandidate candidate) {
-        return model.getModelRoot().resolve(candidate.getManifest().localDirName());
+    private AskAiModelInstallation installationFor(OllamaModelCandidate candidate) {
+        return modelStore.installationFor(model.getModelRoot(), candidate.getManifest());
     }
 
     private void setProgress(final int value, final String text) {
