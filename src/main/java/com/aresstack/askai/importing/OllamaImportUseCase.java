@@ -52,8 +52,9 @@ public final class OllamaImportUseCase {
 
         listener.onMessage("Creating Ollama model: " + plan.getOllamaModelName());
         listener.onProgress(99, "Creating model");
+        listener.onMessage("Using Ollama import profile: " + plan.getImportProfile().getDisplayName());
         String result = ollamaClient.createModelFromFiles(plan.getOllamaModelName(), digestByRelativePath,
-                plan.getQuantization());
+                plan.getQuantization(), plan.getImportProfile());
         listener.onProgress(100, "Model created");
         return result;
     }

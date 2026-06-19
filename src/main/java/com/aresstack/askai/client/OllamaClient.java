@@ -1,5 +1,6 @@
 package com.aresstack.askai.client;
 
+import com.aresstack.askai.catalog.OllamaModelImportProfile;
 import com.aresstack.askai.util.JsonSupport;
 
 import java.io.BufferedReader;
@@ -133,7 +134,8 @@ public final class OllamaClient {
         sendText(request);
     }
 
-    public String createModelFromFiles(String modelName, Map<String, String> digestByRelativePath, String quantization)
+    public String createModelFromFiles(String modelName, Map<String, String> digestByRelativePath, String quantization,
+                                       OllamaModelImportProfile importProfile)
             throws OllamaRequestException {
         StringBuilder builder = new StringBuilder();
         builder.append("{\"model\":").append(JsonSupport.quote(modelName));
@@ -153,6 +155,7 @@ public final class OllamaClient {
         if (quantization != null && !quantization.trim().isEmpty() && !"none".equalsIgnoreCase(quantization.trim())) {
             builder.append(",\"quantize\":").append(JsonSupport.quote(quantization.trim()));
         }
+        appendImportProfile(builder, importProfile);
         builder.append('}');
 
         HttpRequest request = HttpRequest.newBuilder(endpoint("/api/create"))
@@ -161,6 +164,21 @@ public final class OllamaClient {
                 .POST(HttpRequest.BodyPublishers.ofString(builder.toString()))
                 .build();
         return sendText(request);
+    }
+
+    private static void appendImportProfile(StringBuilder builder, OllamaModelImportProfile importProfile) {
+        if (importProfile == null) {
+            return;
+        }
+        if (importProfile.hasTemplate()) {
+            builder.append(",\"template\":").append(JsonSupport.quote(importProfile.getTemplate()));
+        }
+        if (importProfile.hasSystemPrompt()) {
+            builder.append(",\"system\":").append(JsonSupport.quote(importProfile.getSystemPrompt()));
+        }
+        if (importProfile.hasParametersJson()) {
+            builder.append(",\"parameters\":").append(importProfile.getParametersJson());
+        }
     }
 
     private String sendText(HttpRequest request) throws OllamaRequestException {

@@ -142,6 +142,7 @@ public final class OllamaDownloadImportPanel extends JPanel {
         compatibilityLabel.setText(candidate.getCompatibilityNote());
         append("Selected model: " + candidate.getDisplayName());
         append("Note: " + candidate.getCompatibilityNote());
+        append("Ollama import profile: " + candidate.getImportProfile().getDisplayName());
     }
 
     private void configureAccess() {
@@ -234,7 +235,8 @@ public final class OllamaDownloadImportPanel extends JPanel {
             @Override
             protected String doInBackground() throws Exception {
                 OllamaImportUseCase useCase = new OllamaImportUseCase(new OllamaClient(model.getOllamaBaseUrl()));
-                OllamaImportPlan plan = new OllamaImportPlan(targetDir, modelName, quantization);
+                OllamaImportPlan plan = new OllamaImportPlan(targetDir, modelName, quantization,
+                        candidate.getImportProfile());
                 return useCase.execute(plan, new OllamaImportListener() {
                     @Override
                     public void onMessage(String message) {
