@@ -1,7 +1,7 @@
 package com.aresstack.askai.ui;
 
 import com.aresstack.askai.AskAiModel;
-import com.aresstack.askai.client.OllamaClient;
+import com.aresstack.askai.service.OllamaService;
 import com.aresstack.askai.settings.AskAiPaths;
 
 import javax.swing.BorderFactory;
@@ -11,7 +11,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
-import javax.swing.SwingWorker;
+import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
@@ -25,14 +25,16 @@ import java.nio.file.Paths;
 public final class OllamaConfigPanel extends JPanel {
 
     private final AskAiModel model;
+    private final OllamaService ollamaService;
     private final JTextField baseUrlField;
     private final JTextField modelRootField;
     private final JTextField quantizationField;
     private final JTextField keepAliveField;
     private final JTextArea logArea;
 
-    public OllamaConfigPanel(AskAiModel model) {
+    public OllamaConfigPanel(AskAiModel model, OllamaService ollamaService) {
         this.model = model;
+        this.ollamaService = ollamaService;
         this.baseUrlField = new JTextField(model.getOllamaBaseUrl(), 42);
         this.modelRootField = new JTextField(model.getModelRoot().toString(), 42);
         this.quantizationField = new JTextField(model.getDefaultQuantization(), 20);
@@ -99,24 +101,34 @@ public final class OllamaConfigPanel extends JPanel {
     private void testConnection() {
         save();
         append("Testing " + model.getOllamaBaseUrl() + " ...");
-        new SwingWorker<String, Void>() {
+        ollamaService.getServerVersion(new OllamaService.ServerVersionListener() {
             @Override
-            protected String doInBackground() throws Exception {
-                return new OllamaClient(model.getOllamaBaseUrl()).getVersion();
+            public void onServerVersion(final String version) {
+                onUi(new Runnable() {
+                    @Override
+                    public void run() {
+                        append("Connection OK: " + (version == null || version.isEmpty() ? "Ollama reachable" : version));
+                    }
+                });
             }
 
             @Override
-            protected void done() {
-                try {
-                    append("Connection OK: " + get());
-                } catch (Exception ex) {
-                    append("ERROR: " + ex.getMessage());
-                }
+            public void onError(final Exception ex) {
+                onUi(new Runnable() {
+                    @Override
+                    public void run() {
+                        append("ERROR: " + ex.getMessage());
+                    }
+                });
             }
-        }.execute();
+        });
     }
 
     private void append(String message) {
         UiSupport.appendLog(logArea, message);
+    }
+
+    private static void onUi(Runnable runnable) {
+        SwingUtilities.invokeLater(runnable);
     }
 }

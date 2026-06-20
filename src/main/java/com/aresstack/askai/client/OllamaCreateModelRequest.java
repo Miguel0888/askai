@@ -62,7 +62,7 @@ public final class OllamaCreateModelRequest {
             builder.append(nestedIndent)
                     .append(JsonSupport.quote(entry.getKey()))
                     .append(separator)
-                    .append(JsonSupport.quote("sha256:" + entry.getValue()));
+                    .append(JsonSupport.quote(OllamaDigest.prefixed(entry.getValue())));
             if (index < digestByRelativePath.size()) {
                 builder.append(comma);
             }

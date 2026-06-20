@@ -1,12 +1,9 @@
 package com.aresstack.askai.ui;
 
 import com.aresstack.askai.AskAiModel;
-import com.aresstack.askai.client.OllamaClient;
 import com.aresstack.askai.client.OllamaModelInfo;
-import com.aresstack.askai.client.OllamaModelListResponse;
 import com.aresstack.askai.client.OllamaRunningModelInfo;
-import com.aresstack.askai.client.OllamaRunningModelListResponse;
-import com.aresstack.askai.util.JsonSupport;
+import com.aresstack.askai.service.OllamaService;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -17,7 +14,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
-import javax.swing.SwingWorker;
+import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.util.List;
@@ -28,6 +25,7 @@ import java.util.List;
 public final class OllamaModelsPanel extends JPanel {
 
     private final AskAiModel model;
+    private final OllamaService ollamaService;
     private final JTabbedPane tabs;
     private final JPanel installedCardsPanel;
     private final JPanel runningCardsPanel;
@@ -36,8 +34,9 @@ public final class OllamaModelsPanel extends JPanel {
     private final JLabel informationLabel;
     private boolean refreshedOnce;
 
-    public OllamaModelsPanel(AskAiModel model) {
+    public OllamaModelsPanel(AskAiModel model, OllamaService ollamaService) {
         this.model = model;
+        this.ollamaService = ollamaService;
         this.tabs = new JTabbedPane();
         this.installedCardsPanel = createCardsPanel();
         this.runningCardsPanel = createCardsPanel();
@@ -120,70 +119,84 @@ public final class OllamaModelsPanel extends JPanel {
     private void refreshInstalledModels() {
         installedStatusLabel.setText("Loading installed models from " + model.getOllamaBaseUrl() + " ...");
         showInstalledPlaceholder("Loading installed models ...");
-        new SwingWorker<OllamaModelListResponse, Void>() {
+        ollamaService.listInstalledModels(new OllamaService.InstalledModelsListener() {
             @Override
-            protected OllamaModelListResponse doInBackground() throws Exception {
-                return new OllamaClient(model.getOllamaBaseUrl()).getInstalledModels();
+            public void onInstalledModels(final List<OllamaModelInfo> models) {
+                onUi(new Runnable() {
+                    @Override
+                    public void run() {
+                        showInstalledModels(models);
+                        installedStatusLabel.setText("Loaded " + models.size() + " installed models.");
+                    }
+                });
             }
 
             @Override
-            protected void done() {
-                try {
-                    List<OllamaModelInfo> models = get().getModels();
-                    showInstalledModels(models);
-                    installedStatusLabel.setText("Loaded " + models.size() + " installed models.");
-                } catch (Exception ex) {
-                    showInstalledPlaceholder("Could not load installed models: " + ex.getMessage());
-                    installedStatusLabel.setText("Error while loading installed models.");
-                }
+            public void onError(final Exception ex) {
+                onUi(new Runnable() {
+                    @Override
+                    public void run() {
+                        showInstalledPlaceholder("Could not load installed models: " + ex.getMessage());
+                        installedStatusLabel.setText("Error while loading installed models.");
+                    }
+                });
             }
-        }.execute();
+        });
     }
 
     private void refreshRunningModels() {
         runningStatusLabel.setText("Loading running models from " + model.getOllamaBaseUrl() + " ...");
         showRunningPlaceholder("Loading running models ...");
-        new SwingWorker<OllamaRunningModelListResponse, Void>() {
+        ollamaService.listRunningModels(new OllamaService.RunningModelsListener() {
             @Override
-            protected OllamaRunningModelListResponse doInBackground() throws Exception {
-                return new OllamaClient(model.getOllamaBaseUrl()).getRunningModels();
+            public void onRunningModels(final List<OllamaRunningModelInfo> models) {
+                onUi(new Runnable() {
+                    @Override
+                    public void run() {
+                        showRunningModels(models);
+                        runningStatusLabel.setText("Loaded " + models.size() + " running models.");
+                    }
+                });
             }
 
             @Override
-            protected void done() {
-                try {
-                    List<OllamaRunningModelInfo> models = get().getModels();
-                    showRunningModels(models);
-                    runningStatusLabel.setText("Loaded " + models.size() + " running models.");
-                } catch (Exception ex) {
-                    showRunningPlaceholder("Could not load running models: " + ex.getMessage());
-                    runningStatusLabel.setText("Error while loading running models.");
-                }
+            public void onError(final Exception ex) {
+                onUi(new Runnable() {
+                    @Override
+                    public void run() {
+                        showRunningPlaceholder("Could not load running models: " + ex.getMessage());
+                        runningStatusLabel.setText("Error while loading running models.");
+                    }
+                });
             }
-        }.execute();
+        });
     }
 
     private void refreshServerInformation() {
         informationLabel.setText("Loading Ollama server information ...");
-        new SwingWorker<String, Void>() {
+        ollamaService.getServerVersion(new OllamaService.ServerVersionListener() {
             @Override
-            protected String doInBackground() throws Exception {
-                return new OllamaClient(model.getOllamaBaseUrl()).getVersion();
+            public void onServerVersion(final String version) {
+                onUi(new Runnable() {
+                    @Override
+                    public void run() {
+                        informationLabel.setText(version == null || version.isEmpty()
+                                ? "Ollama server: " + model.getOllamaBaseUrl()
+                                : "Ollama server: " + model.getOllamaBaseUrl() + " | version " + version);
+                    }
+                });
             }
 
             @Override
-            protected void done() {
-                try {
-                    String json = get();
-                    String version = JsonSupport.extractFirstStringValue(json, "version");
-                    informationLabel.setText(version.isEmpty()
-                            ? "Ollama server: " + model.getOllamaBaseUrl()
-                            : "Ollama server: " + model.getOllamaBaseUrl() + " | version " + version);
-                } catch (Exception ex) {
-                    informationLabel.setText("Ollama server: " + model.getOllamaBaseUrl());
-                }
+            public void onError(Exception ex) {
+                onUi(new Runnable() {
+                    @Override
+                    public void run() {
+                        informationLabel.setText("Ollama server: " + model.getOllamaBaseUrl());
+                    }
+                });
             }
-        }.execute();
+        });
     }
 
     private void showInstalledModels(List<OllamaModelInfo> models) {
@@ -239,26 +252,31 @@ public final class OllamaModelsPanel extends JPanel {
             return;
         }
         installedStatusLabel.setText("Deleting " + modelName + " ...");
-        new SwingWorker<String, Void>() {
+        ollamaService.deleteModel(modelName, new OllamaService.ActionListener() {
             @Override
-            protected String doInBackground() throws Exception {
-                return new OllamaClient(model.getOllamaBaseUrl()).deleteModel(modelName);
+            public void onComplete(final String message) {
+                onUi(new Runnable() {
+                    @Override
+                    public void run() {
+                        installedStatusLabel.setText(message);
+                        refreshInstalledModels();
+                        if (tabs.getSelectedIndex() == 1) {
+                            refreshRunningModels();
+                        }
+                    }
+                });
             }
 
             @Override
-            protected void done() {
-                try {
-                    get();
-                    installedStatusLabel.setText("Deleted " + modelName + ".");
-                    refreshInstalledModels();
-                    if (tabs.getSelectedIndex() == 1) {
-                        refreshRunningModels();
+            public void onError(final Exception ex) {
+                onUi(new Runnable() {
+                    @Override
+                    public void run() {
+                        installedStatusLabel.setText("Could not delete " + modelName + ": " + ex.getMessage());
                     }
-                } catch (Exception ex) {
-                    installedStatusLabel.setText("Could not delete " + modelName + ": " + ex.getMessage());
-                }
+                });
             }
-        }.execute();
+        });
     }
 
     private static void addPlaceholder(JPanel target, String message) {
@@ -270,5 +288,9 @@ public final class OllamaModelsPanel extends JPanel {
     private static void refreshCards(JPanel panel) {
         panel.revalidate();
         panel.repaint();
+    }
+
+    private static void onUi(Runnable runnable) {
+        SwingUtilities.invokeLater(runnable);
     }
 }

@@ -1,7 +1,5 @@
 package com.aresstack.askai.client;
 
-import com.aresstack.askai.util.JsonSupport;
-
 /**
  * Details object returned by Ollama for installed and running models.
  */
@@ -17,17 +15,6 @@ public final class OllamaModelDetails {
         this.family = safe(family);
         this.parameterSize = safe(parameterSize);
         this.quantizationLevel = safe(quantizationLevel);
-    }
-
-    public static OllamaModelDetails fromJson(String json) {
-        if (json == null || json.trim().isEmpty()) {
-            return empty();
-        }
-        return new OllamaModelDetails(
-                JsonSupport.extractFirstStringValue(json, "format"),
-                JsonSupport.extractFirstStringValue(json, "family"),
-                JsonSupport.extractFirstStringValue(json, "parameter_size"),
-                JsonSupport.extractFirstStringValue(json, "quantization_level"));
     }
 
     public static OllamaModelDetails empty() {

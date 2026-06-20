@@ -1,6 +1,6 @@
 package com.aresstack.askai.importing;
 
-import com.aresstack.askai.client.OllamaClient;
+import com.aresstack.askai.client.AskAiOllamaImportClient;
 import com.aresstack.askai.client.OllamaCreateModelRequest;
 import com.aresstack.askai.client.OllamaRequestException;
 
@@ -14,12 +14,12 @@ import java.util.Map;
  */
 public final class OllamaImportUseCase {
 
-    private final OllamaClient ollamaClient;
+    private final AskAiOllamaImportClient ollamaClient;
     private final LocalModelScanner scanner;
     private final Sha256DigestService digestService;
     private final AskAiModelStore modelStore;
 
-    public OllamaImportUseCase(OllamaClient ollamaClient) {
+    public OllamaImportUseCase(AskAiOllamaImportClient ollamaClient) {
         this.ollamaClient = ollamaClient;
         this.scanner = new LocalModelScanner();
         this.digestService = new Sha256DigestService();

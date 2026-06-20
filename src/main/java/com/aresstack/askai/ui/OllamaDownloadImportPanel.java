@@ -3,12 +3,11 @@ package com.aresstack.askai.ui;
 import com.aresstack.askai.AskAiModel;
 import com.aresstack.askai.catalog.OllamaModelCandidate;
 import com.aresstack.askai.catalog.OllamaModelCatalog;
-import com.aresstack.askai.client.OllamaClient;
 import com.aresstack.askai.importing.AskAiModelInstallation;
 import com.aresstack.askai.importing.AskAiModelStore;
 import com.aresstack.askai.importing.OllamaImportListener;
 import com.aresstack.askai.importing.OllamaImportPlan;
-import com.aresstack.askai.importing.OllamaImportUseCase;
+import com.aresstack.askai.service.ModelInstallService;
 import com.aresstack.askai.settings.AskAiPaths;
 import com.aresstack.windirectml.workbench.download.DownloadAccessSettings;
 import com.aresstack.windirectml.workbench.download.DownloadFolderOpener;
@@ -44,6 +43,7 @@ import java.util.List;
 public final class OllamaDownloadImportPanel extends JPanel {
 
     private final AskAiModel model;
+    private final ModelInstallService modelInstallService;
     private final DownloadOverrideStore overrideStore;
     private final AskAiModelStore modelStore;
     private final JComboBox<OllamaModelCandidate> candidateCombo;
@@ -55,8 +55,9 @@ public final class OllamaDownloadImportPanel extends JPanel {
     private final JProgressBar progressBar;
     private final JTextArea logArea;
 
-    public OllamaDownloadImportPanel(AskAiModel model) {
+    public OllamaDownloadImportPanel(AskAiModel model, ModelInstallService modelInstallService) {
         this.model = model;
+        this.modelInstallService = modelInstallService;
         this.overrideStore = new DownloadOverrideStore(AskAiPaths.downloadOverridesFile());
         this.modelStore = new AskAiModelStore();
         this.overrideStore.load();
@@ -243,10 +244,9 @@ public final class OllamaDownloadImportPanel extends JPanel {
         new SwingWorker<String, Void>() {
             @Override
             protected String doInBackground() throws Exception {
-                OllamaImportUseCase useCase = new OllamaImportUseCase(new OllamaClient(model.getOllamaBaseUrl()));
                 OllamaImportPlan plan = new OllamaImportPlan(targetDir, modelName, quantization,
                         candidate.getImportProfile(), installation);
-                return useCase.execute(plan, new OllamaImportListener() {
+                return modelInstallService.install(plan, new OllamaImportListener() {
                     @Override
                     public void onMessage(String message) {
                         append(message);

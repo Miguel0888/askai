@@ -28,6 +28,7 @@ compileTestJava.options.encoding = 'UTF-8'
 dependencies {
     implementation 'com.aresstack:win-proxy-java:0.1.0-beta.4'
     implementation 'com.google.code.gson:gson:2.13.1'
+    implementation 'io.github.ollama4j:ollama4j:1.1.7'
     runtimeOnly 'ch.qos.logback:logback-classic:1.5.6'
 
     testImplementation platform('org.junit:junit-bom:5.10.2')

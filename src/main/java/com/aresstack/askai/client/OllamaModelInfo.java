@@ -1,7 +1,5 @@
 package com.aresstack.askai.client;
 
-import com.aresstack.askai.util.JsonSupport;
-
 /**
  * Installed Ollama model metadata.
  */
@@ -22,17 +20,6 @@ public final class OllamaModelInfo {
         this.size = size;
         this.digest = safe(digest);
         this.details = details == null ? OllamaModelDetails.empty() : details;
-    }
-
-    public static OllamaModelInfo fromJson(String json) {
-        String detailsJson = JsonSupport.extractObjectValue(json, "details");
-        return new OllamaModelInfo(
-                JsonSupport.extractFirstStringValue(json, "name"),
-                JsonSupport.extractFirstStringValue(json, "model"),
-                JsonSupport.extractFirstStringValue(json, "modified_at"),
-                JsonSupport.extractFirstLongValue(json, "size"),
-                JsonSupport.extractFirstStringValue(json, "digest"),
-                OllamaModelDetails.fromJson(detailsJson));
     }
 
     public String getName() {

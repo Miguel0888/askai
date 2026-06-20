@@ -1,9 +1,7 @@
 package com.aresstack.askai.ui;
 
 import com.aresstack.askai.AskAiModel;
-import com.aresstack.askai.client.OllamaChatStreamListener;
-import com.aresstack.askai.client.OllamaClient;
-import com.aresstack.askai.util.JsonSupport;
+import com.aresstack.askai.service.OllamaService;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -14,7 +12,6 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
-import javax.swing.SwingWorker;
 import javax.swing.Timer;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
@@ -22,7 +19,6 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.util.List;
-import java.util.concurrent.CancellationException;
 
 /**
  * Main chat panel for the selected AI server model.
@@ -30,6 +26,7 @@ import java.util.concurrent.CancellationException;
 public final class OllamaChatPanel extends JPanel {
 
     private final AskAiModel model;
+    private final OllamaService ollamaService;
     private final JComboBox<String> modelCombo;
     private final JTextField keepAliveField;
     private final JTextArea systemPromptArea;
@@ -39,12 +36,13 @@ public final class OllamaChatPanel extends JPanel {
     private final JLabel statusLabel;
     private final JButton sendButton;
     private final JButton stopButton;
-    private SwingWorker<Void, Void> chatWorker;
+    private OllamaService.Task chatTask;
     private Timer elapsedTimer;
     private long requestStartedAtMillis;
 
-    public OllamaChatPanel(AskAiModel model) {
+    public OllamaChatPanel(AskAiModel model, OllamaService ollamaService) {
         this.model = model;
+        this.ollamaService = ollamaService;
         this.modelCombo = new JComboBox<String>();
         this.keepAliveField = new JTextField(model.getDefaultKeepAlive(), 10);
         this.systemPromptArea = new JTextArea("You are a concise local assistant.", 3, 70);
@@ -126,31 +124,36 @@ public final class OllamaChatPanel extends JPanel {
 
     private void refreshModels() {
         setStatus("Loading models from " + model.getOllamaBaseUrl() + " ...");
-        new SwingWorker<List<String>, Void>() {
+        ollamaService.listModelNames(new OllamaService.ModelNamesListener() {
             @Override
-            protected List<String> doInBackground() throws Exception {
-                return new OllamaClient(model.getOllamaBaseUrl()).getModelNames();
+            public void onModelNames(final List<String> names) {
+                onUi(new Runnable() {
+                    @Override
+                    public void run() {
+                        modelCombo.removeAllItems();
+                        for (String name : names) {
+                            modelCombo.addItem(name);
+                        }
+                        if (names.isEmpty()) {
+                            setStatus("No models installed on this AI server. Open Install to add one.");
+                        } else {
+                            setStatus("Ready. " + names.size() + " model(s) available.");
+                        }
+                    }
+                });
             }
 
             @Override
-            protected void done() {
-                try {
-                    List<String> names = get();
-                    modelCombo.removeAllItems();
-                    for (String name : names) {
-                        modelCombo.addItem(name);
+            public void onError(final Exception ex) {
+                onUi(new Runnable() {
+                    @Override
+                    public void run() {
+                        setStatus("Server offline or not reachable. Open Connections to fix it.");
+                        append("Connection error: " + ex.getMessage());
                     }
-                    if (names.isEmpty()) {
-                        setStatus("No models installed on this AI server. Open Install to add one.");
-                    } else {
-                        setStatus("Ready. " + names.size() + " model(s) available.");
-                    }
-                } catch (Exception ex) {
-                    setStatus("Server offline or not reachable. Open Connections to fix it.");
-                    append("Connection error: " + ex.getMessage());
-                }
+                });
             }
-        }.execute();
+        });
     }
 
     private void sendChat() {
@@ -164,76 +167,72 @@ public final class OllamaChatPanel extends JPanel {
             setStatus("Write a message before sending.");
             return;
         }
-        final String systemPrompt = systemPromptArea.getText();
-        final String keepAlive = keepAliveField.getText();
         responseArea.setText("");
         append("Sending message to " + modelName + " on " + model.getOllamaBaseUrl());
         startElapsedTimer();
         setBusy(true);
 
-        chatWorker = new SwingWorker<Void, Void>() {
-            private String finalJson = "";
-
+        OllamaService.ChatRequest request = new OllamaService.ChatRequest(
+                modelName, systemPromptArea.getText(), userPrompt, keepAliveField.getText());
+        chatTask = ollamaService.streamChat(request, new OllamaService.ChatListener() {
             @Override
-            protected Void doInBackground() throws Exception {
-                new OllamaClient(model.getOllamaBaseUrl()).streamChat(modelName, systemPrompt, userPrompt, keepAlive,
-                        new OllamaChatStreamListener() {
-                            @Override
-                            public void onContent(final String content) {
-                                SwingUtilities.invokeLater(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        responseArea.append(content);
-                                    }
-                                });
-                            }
-
-                            @Override
-                            public void onStatus(final String status) {
-                                SwingUtilities.invokeLater(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        setStatus(status);
-                                    }
-                                });
-                            }
-
-                            @Override
-                            public void onComplete(String completedJson) {
-                                finalJson = completedJson == null ? "" : completedJson;
-                            }
-                        });
-                return null;
-            }
-
-            @Override
-            protected void done() {
-                stopElapsedTimer();
-                setBusy(false);
-                try {
-                    get();
-                    if (responseArea.getText().trim().isEmpty() && !finalJson.isEmpty()) {
-                        String fallback = JsonSupport.extractChatMessageContent(finalJson);
-                        responseArea.setText(fallback.isEmpty() ? finalJson : fallback);
+            public void onContent(final String content) {
+                onUi(new Runnable() {
+                    @Override
+                    public void run() {
+                        responseArea.append(content);
                     }
-                    appendMetrics(finalJson);
-                    setStatus("Ready.");
-                } catch (CancellationException ex) {
-                    setStatus("Cancelled.");
-                    append("Chat request cancelled.");
-                } catch (Exception ex) {
-                    setStatus("Chat failed.");
-                    append("ERROR: " + ex.getMessage());
-                }
+                });
             }
-        };
-        chatWorker.execute();
+
+            @Override
+            public void onStatus(final String status) {
+                onUi(new Runnable() {
+                    @Override
+                    public void run() {
+                        setStatus(status);
+                    }
+                });
+            }
+
+            @Override
+            public void onComplete(final OllamaService.ChatResult result) {
+                onUi(new Runnable() {
+                    @Override
+                    public void run() {
+                        stopElapsedTimer();
+                        setBusy(false);
+                        if (responseArea.getText().trim().isEmpty() && !result.getFallbackText().isEmpty()) {
+                            responseArea.setText(result.getFallbackText());
+                        }
+                        appendMetrics(result);
+                        setStatus("Ready.");
+                    }
+                });
+            }
+
+            @Override
+            public void onError(final Exception ex) {
+                onUi(new Runnable() {
+                    @Override
+                    public void run() {
+                        stopElapsedTimer();
+                        setBusy(false);
+                        setStatus("Chat failed.");
+                        append("ERROR: " + ex.getMessage());
+                    }
+                });
+            }
+        });
     }
 
     private void stopChat() {
-        if (chatWorker != null && !chatWorker.isDone()) {
-            chatWorker.cancel(true);
-            setStatus("Cancelling request ...");
+        if (chatTask != null) {
+            chatTask.cancel();
+            stopElapsedTimer();
+            setBusy(false);
+            setStatus("Cancelled.");
+            append("Chat request cancelled.");
         }
     }
 
@@ -253,27 +252,17 @@ public final class OllamaChatPanel extends JPanel {
         }
     }
 
-    private void appendMetrics(String finalJson) {
-        if (finalJson == null || finalJson.isEmpty()) {
+    private void appendMetrics(OllamaService.ChatResult result) {
+        if (result == null || !result.hasMetrics()) {
             append("Chat complete.");
             return;
         }
-        String evalCount = JsonSupport.extractFirstNumberValue(finalJson, "eval_count");
-        String evalDuration = JsonSupport.extractFirstNumberValue(finalJson, "eval_duration");
-        if (evalCount.isEmpty() || evalDuration.isEmpty()) {
-            append("Chat complete.");
-            return;
-        }
-        try {
-            double tokens = Double.parseDouble(evalCount);
-            double seconds = Double.parseDouble(evalDuration) / 1_000_000_000.0d;
-            if (seconds > 0.0d) {
-                append(String.format("Chat complete: %.0f output tokens, %.2f tok/s.", tokens, tokens / seconds));
-            } else {
-                append("Chat complete: " + evalCount + " output tokens.");
-            }
-        } catch (NumberFormatException ex) {
-            append("Chat complete.");
+        double tokens = result.getEvalCount();
+        double seconds = result.getEvalDurationNanos() / 1_000_000_000.0d;
+        if (seconds > 0.0d) {
+            append(String.format("Chat complete: %.0f output tokens, %.2f tok/s.", tokens, tokens / seconds));
+        } else {
+            append("Chat complete: " + result.getEvalCount() + " output tokens.");
         }
     }
 
@@ -289,5 +278,9 @@ public final class OllamaChatPanel extends JPanel {
 
     private void append(String message) {
         UiSupport.appendLog(logArea, message);
+    }
+
+    private static void onUi(Runnable runnable) {
+        SwingUtilities.invokeLater(runnable);
     }
 }

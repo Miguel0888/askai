@@ -9,5 +9,5 @@ public interface OllamaChatStreamListener {
 
     void onStatus(String status);
 
-    void onComplete(String finalJson);
+    void onComplete(OllamaChatCompletion completion);
 }
