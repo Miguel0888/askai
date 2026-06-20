@@ -225,6 +225,7 @@ public final class JsonSupport {
             }
             if (ch == '"') {
                 inString = true;
+            } else if (ch == open) {
                 depth++;
             } else if (ch == close) {
                 depth--;
