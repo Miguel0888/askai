@@ -9,9 +9,9 @@ import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
-import javax.swing.event.MenuEvent;
-import javax.swing.event.MenuListener;
 import java.awt.BorderLayout;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.CardLayout;
 import java.awt.Dimension;
 
@@ -68,19 +68,11 @@ public final class AskAiFrame extends JFrame {
 
     private JMenu createTopLevelMenu(String title, String screenName) {
         final JMenu menu = new JMenu(title);
-        menu.addMenuListener(new MenuListener() {
+        menu.addMouseListener(new MouseAdapter() {
             @Override
-            public void menuSelected(MenuEvent event) {
+            public void mouseClicked(MouseEvent event) {
                 showScreen(screenName);
                 menu.setSelected(false);
-            }
-
-            @Override
-            public void menuDeselected(MenuEvent event) {
-            }
-
-            @Override
-            public void menuCanceled(MenuEvent event) {
             }
         });
         return menu;
