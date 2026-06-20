@@ -14,7 +14,7 @@ public final class DefaultAskAiServices implements AskAiServices {
     public DefaultAskAiServices(AskAiModel model) {
         this.ollamaService = new DefaultOllamaService(model);
         this.modelInstallService = new DefaultModelInstallService(model);
-        this.featureActionService = new DummyFeatureActionService();
+        this.featureActionService = new OllamaFeatureActionService(model);
     }
 
     @Override

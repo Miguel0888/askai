@@ -1,5 +1,6 @@
 package com.aresstack.askai.ui;
 
+import com.aresstack.askai.service.FeatureAction;
 import com.aresstack.askai.service.FeatureActionService;
 
 import javax.swing.BorderFactory;
@@ -31,19 +32,15 @@ public final class OllamaActionsPanel extends JPanel {
 
         JPanel header = new JPanel(new BorderLayout(6, 6));
         JLabel title = new JLabel("Ollama Actions");
-        JLabel subtitle = new JLabel("UI placeholders for future service/API implementations. No API call is executed here yet.");
+        JLabel subtitle = new JLabel("UI placeholders supplied by FeatureActionService. No API call is executed here yet.");
         header.add(title, BorderLayout.NORTH);
         header.add(subtitle, BorderLayout.CENTER);
         add(header, BorderLayout.NORTH);
 
         JPanel grid = new JPanel(new GridLayout(0, 2, 10, 10));
-        grid.add(card("Pull model", "Download a model from the Ollama library.", "pull-model"));
-        grid.add(card("Create model", "Create a model from a Modelfile or uploaded local files.", "create-model"));
-        grid.add(card("Model details", "Show detailed metadata, parameters and modelfile content.", "model-details"));
-        grid.add(card("Server health", "Ping Ollama, show version, latency and connection state.", "server-health"));
-        grid.add(card("Vision prompt", "Send an image and a prompt to a multimodal model.", "vision-prompt"));
-        grid.add(card("Tool calling", "Expose typed Java tools to compatible local models.", "tool-calling"));
-        grid.add(card("MCP tools", "Connect future MCP tool sets to local model actions.", "mcp-tools"));
+        for (FeatureAction action : featureActionService.actions()) {
+            grid.add(card(action));
+        }
         add(grid, BorderLayout.CENTER);
 
         statusArea.setEditable(false);
@@ -54,14 +51,14 @@ public final class OllamaActionsPanel extends JPanel {
         add(statusArea, BorderLayout.SOUTH);
     }
 
-    private JPanel card(String title, String description, final String actionId) {
+    private JPanel card(final FeatureAction action) {
         JPanel panel = new JPanel(new BorderLayout(6, 6));
         panel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createTitledBorder(title),
+                BorderFactory.createTitledBorder(action.getTitle()),
                 BorderFactory.createEmptyBorder(8, 8, 8, 8)));
-        JLabel body = new JLabel("<html>" + description + "</html>");
+        JLabel body = new JLabel("<html>" + action.getDescription() + "</html>");
         JButton button = new JButton("Open");
-        button.addActionListener(event -> execute(actionId));
+        button.addActionListener(event -> execute(action.getId()));
         panel.add(body, BorderLayout.CENTER);
         panel.add(button, BorderLayout.SOUTH);
         return panel;
