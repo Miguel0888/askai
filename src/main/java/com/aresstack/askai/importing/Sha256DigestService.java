@@ -9,7 +9,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 /**
- * Computes Ollama-compatible SHA256 blob digests.
+ * Computes SHA-256 blob digests as plain 64-character hex values.
+ * Ollama API callers add the required algorithm prefix exactly once.
  */
 public final class Sha256DigestService {
 
@@ -24,7 +25,7 @@ public final class Sha256DigestService {
                 // Consume stream to update digest.
             }
         }
-        return "sha256:" + toHex(digest.digest());
+        return toHex(digest.digest());
     }
 
     private static MessageDigest newDigest() {
