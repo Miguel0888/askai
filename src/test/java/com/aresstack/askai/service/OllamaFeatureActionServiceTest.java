@@ -24,9 +24,14 @@ class OllamaFeatureActionServiceTest {
         OllamaFeatureActionService service = new OllamaFeatureActionService(new AskAiModel());
         List<FeatureAction> actions = service.actions();
 
-        assertEquals(7, actions.size());
+        assertEquals(11, actions.size());
         assertNotNull(findById(actions, "server-health"));
+        assertNotNull(findById(actions, "list-running"));
         assertNotNull(findById(actions, "model-details"));
+        assertNotNull(findById(actions, "pull-model"));
+        assertNotNull(findById(actions, "unload-model"));
+        assertNotNull(findById(actions, "generate"));
+        assertNotNull(findById(actions, "embed"));
         assertNotNull(findById(actions, "vision-prompt"));
     }
 

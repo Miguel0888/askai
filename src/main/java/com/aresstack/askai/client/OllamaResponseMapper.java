@@ -1,11 +1,16 @@
 package com.aresstack.askai.client;
 
+import io.github.ollama4j.models.chat.OllamaChatMessage;
+import io.github.ollama4j.models.chat.OllamaChatMessageRole;
 import io.github.ollama4j.models.ps.ModelProcessesResult;
 import io.github.ollama4j.models.response.Model;
+import io.github.ollama4j.models.response.ModelDetail;
 import io.github.ollama4j.models.response.ModelMeta;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -61,6 +66,44 @@ final class OllamaResponseMapper {
                 process.getSize(),
                 process.getSizeVram(),
                 toDetails(process.getDetails()));
+    }
+
+    static List<OllamaChatMessage> toChatMessages(List<OllamaChatTurn> conversation) {
+        ArrayList<OllamaChatMessage> messages = new ArrayList<OllamaChatMessage>();
+        if (conversation != null) {
+            for (OllamaChatTurn turn : conversation) {
+                if (turn != null && !turn.getContent().trim().isEmpty()) {
+                    messages.add(new OllamaChatMessage(toRole(turn.getRole()), turn.getContent()));
+                }
+            }
+        }
+        return messages;
+    }
+
+    static OllamaChatMessageRole toRole(String role) {
+        if (OllamaChatTurn.ROLE_SYSTEM.equalsIgnoreCase(role)) {
+            return OllamaChatMessageRole.SYSTEM;
+        }
+        if (OllamaChatTurn.ROLE_ASSISTANT.equalsIgnoreCase(role)) {
+            return OllamaChatMessageRole.ASSISTANT;
+        }
+        return OllamaChatMessageRole.USER;
+    }
+
+    static OllamaModelInfoView toModelInfoView(ModelDetail detail) {
+        if (detail == null) {
+            return new OllamaModelInfoView(OllamaModelDetails.empty(), "", "", "", "", Collections.<String>emptyList());
+        }
+        List<String> capabilities = detail.getCapabilities() == null
+                ? Collections.<String>emptyList()
+                : Arrays.asList(detail.getCapabilities());
+        return new OllamaModelInfoView(
+                toDetails(detail.getDetails()),
+                detail.getTemplate(),
+                detail.getSystem(),
+                detail.getParameters(),
+                detail.getModelFile(),
+                capabilities);
     }
 
     static OllamaModelDetails toDetails(ModelMeta meta) {

@@ -107,7 +107,7 @@ public final class AskAiFrame extends JFrame {
     private JPanel createContentPanel() {
         contentPanel.add(new OllamaChatPanel(model, services.ollama()), CHAT_VIEW);
         contentPanel.add(modelsPanel, MODELS_VIEW);
-        contentPanel.add(new OllamaActionsPanel(services.featureActions()), ACTIONS_VIEW);
+        contentPanel.add(new OllamaActionsPanel(services.featureActions(), services.ollama()), ACTIONS_VIEW);
         contentPanel.add(new OllamaDownloadImportPanel(model, services.modelInstall()), INSTALL_VIEW);
         contentPanel.add(new OllamaConfigPanel(model, services.ollama()), CONNECTIONS_VIEW);
         contentPanel.add(new ProxyPanel(model), NETWORK_VIEW);

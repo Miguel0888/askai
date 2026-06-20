@@ -27,10 +27,14 @@ public final class OllamaFeatureActionService implements FeatureActionService {
     private final AskAiModel model;
     private final ExecutorService executor;
     private final List<FeatureAction> actions = Collections.unmodifiableList(Arrays.asList(
-            new FeatureAction("pull-model", "Pull model", "Download a model from the Ollama library."),
-            new FeatureAction("create-model", "Create model", "Create a model from a Modelfile or uploaded local files."),
-            new FeatureAction("model-details", "Model details", "Show detailed metadata, parameters and modelfile content."),
-            new FeatureAction("server-health", "Server health", "Ping Ollama, show version, latency and connection state."),
+            new FeatureAction("server-health", "Server health", "Ping Ollama and show version and round-trip latency."),
+            new FeatureAction("list-running", "Running models", "List models currently loaded in memory (ps)."),
+            new FeatureAction("model-details", "Model details", "Show metadata, template, parameters and capabilities. Needs a model name."),
+            new FeatureAction("pull-model", "Pull model", "Download a model from the Ollama library. Needs a model name."),
+            new FeatureAction("unload-model", "Unload model", "Unload a running model from memory. Needs a model name."),
+            new FeatureAction("generate", "Generate", "One-shot completion. Needs a model name and a prompt."),
+            new FeatureAction("embed", "Embeddings", "Compute an embedding vector. Needs a model name and text."),
+            new FeatureAction("create-model", "Create model", "Create from local files / Modelfile (use the Install tab)."),
             new FeatureAction("vision-prompt", "Vision prompt", "Send an image and a prompt to a multimodal model."),
             new FeatureAction("tool-calling", "Tool calling", "Expose typed Java tools to compatible local models."),
             new FeatureAction("mcp-tools", "MCP tools", "Connect future MCP tool sets to local model actions.")
@@ -75,6 +79,9 @@ public final class OllamaFeatureActionService implements FeatureActionService {
             return "ollama4j can pull from the Ollama library, but a target model name is required. "
                     + "Use the Install tab to pull or import a specific model.";
         }
+        if ("list-running".equals(actionId)) {
+            return runningModels();
+        }
         if ("create-model".equals(actionId)) {
             return "Creating a model runs through the Install tab: it uploads local files as blobs and "
                     + "calls Ollama /api/create via the import client.";
@@ -98,6 +105,22 @@ public final class OllamaFeatureActionService implements FeatureActionService {
         } catch (Exception ex) {
             return "Ollama at " + baseUrl + " is not reachable: " + ex.getMessage();
         }
+    }
+
+    private String runningModels() throws Exception {
+        String baseUrl = model.getOllamaBaseUrl();
+        List<com.aresstack.askai.client.OllamaRunningModelInfo> running =
+                new AskAiOllamaClient(baseUrl).getRunningModels().getModels();
+        if (running.isEmpty()) {
+            return "No models currently loaded on " + baseUrl + ".";
+        }
+        StringBuilder builder = new StringBuilder();
+        builder.append(running.size()).append(" running model(s) on ").append(baseUrl).append(':');
+        for (com.aresstack.askai.client.OllamaRunningModelInfo info : running) {
+            builder.append("\n  - ").append(info.getDisplayName())
+                    .append(" [VRAM ").append(humanBytes(info.getSizeVram())).append(']');
+        }
+        return builder.toString();
     }
 
     private String modelDetails() throws Exception {

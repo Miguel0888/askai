@@ -4,7 +4,10 @@ import com.aresstack.askai.AskAiModel;
 import com.aresstack.askai.client.AskAiOllamaClient;
 import com.aresstack.askai.client.OllamaChatCompletion;
 import com.aresstack.askai.client.OllamaChatStreamListener;
+import com.aresstack.askai.client.OllamaPullProgress;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -12,8 +15,10 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Default service implementation. It hides the ollama4j adapter behind
- * the service interface so Swing panels never depend on REST/DTO details.
+ * Service implementation backed by the {@code ollama4j} adapter
+ * ({@link AskAiOllamaClient}). All regular Ollama REST calls run through the
+ * adapter, which maps library DTOs to AskAI domain models. The service itself
+ * never parses JSON and never touches the Swing thread.
  */
 public final class DefaultOllamaService implements OllamaService {
 
@@ -82,6 +87,35 @@ public final class DefaultOllamaService implements OllamaService {
     }
 
     @Override
+    public Task ping(final ActionListener listener) {
+        return submit(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    boolean reachable = client().ping();
+                    listener.onComplete(reachable ? "Ollama is reachable." : "Ollama did not respond to ping.");
+                } catch (Exception ex) {
+                    listener.onError(ex);
+                }
+            }
+        });
+    }
+
+    @Override
+    public Task getModelInfo(final String modelName, final ModelInfoListener listener) {
+        return submit(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    listener.onModelInfo(client().getModelInfo(modelName));
+                } catch (Exception ex) {
+                    listener.onError(ex);
+                }
+            }
+        });
+    }
+
+    @Override
     public Task deleteModel(final String modelName, final ActionListener listener) {
         return submit(new Runnable() {
             @Override
@@ -97,13 +131,78 @@ public final class DefaultOllamaService implements OllamaService {
     }
 
     @Override
+    public Task unloadModel(final String modelName, final ActionListener listener) {
+        return submit(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    client().unloadModel(modelName);
+                    listener.onComplete("Unloaded " + modelName + ".");
+                } catch (Exception ex) {
+                    listener.onError(ex);
+                }
+            }
+        });
+    }
+
+    @Override
+    public Task pullModel(final String modelName, final PullListener listener) {
+        return submit(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    client().pullModel(modelName, new com.aresstack.askai.client.OllamaPullListener() {
+                        @Override
+                        public void onProgress(OllamaPullProgress progress) {
+                            listener.onProgress(progress);
+                        }
+                    });
+                    listener.onComplete("Pulled " + modelName + ".");
+                } catch (Exception ex) {
+                    listener.onError(ex);
+                }
+            }
+        });
+    }
+
+    @Override
+    public Task generate(final String modelName, final String prompt, final ActionListener listener) {
+        return submit(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    listener.onComplete(client().generate(modelName, prompt));
+                } catch (Exception ex) {
+                    listener.onError(ex);
+                }
+            }
+        });
+    }
+
+    @Override
+    public Task embed(final String modelName, final String input, final EmbedListener listener) {
+        return submit(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    List<List<Double>> embeddings = client().embed(modelName, Collections.singletonList(input));
+                    int dimensions = embeddings.isEmpty() ? 0 : embeddings.get(0).size();
+                    listener.onEmbedding(embeddings.size(), dimensions);
+                } catch (Exception ex) {
+                    listener.onError(ex);
+                }
+            }
+        });
+    }
+
+    @Override
     public Task streamChat(final ChatRequest request, final ChatListener listener) {
         return submit(new Runnable() {
             @Override
             public void run() {
                 try {
-                    client().streamChat(request.getModelName(), request.getSystemPrompt(),
-                            request.getUserPrompt(), request.getKeepAlive(), new OllamaChatStreamListener() {
+                    client().streamChat(request.getModelName(), request.getMessages(), request.getKeepAlive(),
+                            new OllamaChatStreamListener() {
                                 @Override
                                 public void onContent(String content) {
                                     listener.onContent(content);

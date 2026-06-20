@@ -1,13 +1,17 @@
 package com.aresstack.askai.service;
 
+import com.aresstack.askai.client.OllamaChatTurn;
+import com.aresstack.askai.client.OllamaModelInfoView;
 import com.aresstack.askai.client.OllamaModelInfo;
+import com.aresstack.askai.client.OllamaPullProgress;
 import com.aresstack.askai.client.OllamaRunningModelInfo;
 
 import java.util.List;
 
 /**
  * UI-facing Ollama service boundary. Swing panels depend on this interface,
- * not on HTTP clients, JSON, or a concrete Ollama library.
+ * not on HTTP clients, JSON, or a concrete Ollama library. It exposes the full
+ * set of operations AskAI wires from {@code ollama4j}.
  */
 public interface OllamaService {
 
@@ -19,7 +23,19 @@ public interface OllamaService {
 
     Task getServerVersion(ServerVersionListener listener);
 
+    Task ping(ActionListener listener);
+
+    Task getModelInfo(String modelName, ModelInfoListener listener);
+
     Task deleteModel(String modelName, ActionListener listener);
+
+    Task unloadModel(String modelName, ActionListener listener);
+
+    Task pullModel(String modelName, PullListener listener);
+
+    Task generate(String modelName, String prompt, ActionListener listener);
+
+    Task embed(String modelName, String input, EmbedListener listener);
 
     Task streamChat(ChatRequest request, ChatListener listener);
 
@@ -43,8 +59,22 @@ public interface OllamaService {
         void onServerVersion(String version);
     }
 
+    interface ModelInfoListener extends FailureListener {
+        void onModelInfo(OllamaModelInfoView info);
+    }
+
     interface ActionListener extends FailureListener {
         void onComplete(String message);
+    }
+
+    interface PullListener extends FailureListener {
+        void onProgress(OllamaPullProgress progress);
+
+        void onComplete(String message);
+    }
+
+    interface EmbedListener extends FailureListener {
+        void onEmbedding(int vectorCount, int dimensions);
     }
 
     interface ChatListener extends FailureListener {
@@ -61,31 +91,25 @@ public interface OllamaService {
 
     final class ChatRequest {
         private final String modelName;
-        private final String systemPrompt;
-        private final String userPrompt;
         private final String keepAlive;
+        private final List<OllamaChatTurn> messages;
 
-        public ChatRequest(String modelName, String systemPrompt, String userPrompt, String keepAlive) {
+        public ChatRequest(String modelName, String keepAlive, List<OllamaChatTurn> messages) {
             this.modelName = modelName;
-            this.systemPrompt = systemPrompt;
-            this.userPrompt = userPrompt;
             this.keepAlive = keepAlive;
+            this.messages = messages;
         }
 
         public String getModelName() {
             return modelName;
         }
 
-        public String getSystemPrompt() {
-            return systemPrompt;
-        }
-
-        public String getUserPrompt() {
-            return userPrompt;
-        }
-
         public String getKeepAlive() {
             return keepAlive;
+        }
+
+        public List<OllamaChatTurn> getMessages() {
+            return messages;
         }
     }
 
@@ -114,6 +138,13 @@ public interface OllamaService {
 
         public boolean hasMetrics() {
             return evalCount > 0L && evalDurationNanos > 0L;
+        }
+
+        public double tokensPerSecond() {
+            if (!hasMetrics()) {
+                return 0.0d;
+            }
+            return evalCount / (evalDurationNanos / 1_000_000_000.0d);
         }
     }
 }

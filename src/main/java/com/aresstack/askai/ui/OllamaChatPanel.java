@@ -1,41 +1,54 @@
 package com.aresstack.askai.ui;
 
 import com.aresstack.askai.AskAiModel;
+import com.aresstack.askai.client.OllamaChatTurn;
 import com.aresstack.askai.service.OllamaService;
 
+import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
+import javax.swing.Box;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
-import java.awt.Insets;
+import java.awt.event.ActionEvent;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Main chat panel for the selected AI server model.
+ * Clean, shippable chat window for the selected Ollama model.
+ *
+ * <p>Keeps a multi-turn conversation, streams assistant tokens live into a styled
+ * transcript, and sends the full history (optionally prefixed by a system prompt) on
+ * every turn. All Ollama access goes through {@link OllamaService}.</p>
  */
 public final class OllamaChatPanel extends JPanel {
 
     private final AskAiModel model;
     private final OllamaService ollamaService;
+
     private final JComboBox<String> modelCombo;
     private final JTextField keepAliveField;
     private final JTextArea systemPromptArea;
-    private final JTextArea promptArea;
-    private final JTextArea responseArea;
-    private final JTextArea logArea;
+    private final JTextArea inputArea;
+    private final ChatTranscript transcript;
     private final JLabel statusLabel;
     private final JButton sendButton;
     private final JButton stopButton;
+
+    private final List<OllamaChatTurn> history = new ArrayList<OllamaChatTurn>();
+    private final StringBuilder streamingAssistant = new StringBuilder();
     private OllamaService.Task chatTask;
     private Timer elapsedTimer;
     private long requestStartedAtMillis;
@@ -44,82 +57,102 @@ public final class OllamaChatPanel extends JPanel {
         this.model = model;
         this.ollamaService = ollamaService;
         this.modelCombo = new JComboBox<String>();
-        this.keepAliveField = new JTextField(model.getDefaultKeepAlive(), 10);
-        this.systemPromptArea = new JTextArea("You are a concise local assistant.", 3, 70);
-        this.promptArea = new JTextArea("", 6, 70);
-        this.responseArea = new JTextArea(16, 70);
-        this.logArea = new JTextArea(6, 70);
-        this.statusLabel = new JLabel("Select a model and send a message.");
+        this.keepAliveField = new JTextField(model.getDefaultKeepAlive(), 6);
+        this.systemPromptArea = new JTextArea("You are a concise local assistant.", 2, 40);
+        this.inputArea = new JTextArea(3, 40);
+        this.transcript = new ChatTranscript();
+        this.statusLabel = new JLabel("Select a model and start chatting.");
         this.sendButton = new JButton("Send");
         this.stopButton = new JButton("Stop");
         buildUserInterface();
         setBusy(false);
+        showEmptyState();
         refreshModels();
     }
 
     private void buildUserInterface() {
         setLayout(new BorderLayout(8, 8));
         setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        add(buildToolbar(), BorderLayout.NORTH);
+        add(transcript.getComponent(), BorderLayout.CENTER);
+        add(buildComposer(), BorderLayout.SOUTH);
+    }
 
-        JPanel form = new JPanel(new GridBagLayout());
-        form.setBorder(BorderFactory.createTitledBorder("Chat"));
-        GridBagConstraints constraints = new GridBagConstraints();
-        constraints.insets = new Insets(4, 4, 4, 4);
-        constraints.anchor = GridBagConstraints.WEST;
-        constraints.fill = GridBagConstraints.HORIZONTAL;
+    private JComponent buildToolbar() {
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+        toolbar.add(new JLabel("Model"));
+        modelCombo.setPreferredSize(new Dimension(260, modelCombo.getPreferredSize().height));
+        toolbar.add(modelCombo);
+        JButton refreshButton = new JButton("Refresh");
+        refreshButton.addActionListener(event -> refreshModels());
+        toolbar.add(refreshButton);
+        JButton newChatButton = new JButton("New chat");
+        newChatButton.addActionListener(event -> newChat());
+        toolbar.add(newChatButton);
+        toolbar.add(new JLabel("keep_alive"));
+        toolbar.add(keepAliveField);
 
-        addRow(form, constraints, 0, "Model", modelCombo);
-        addRow(form, constraints, 1, "Keep alive", keepAliveField);
-        addTextRow(form, constraints, 2, "System", systemPromptArea);
-        addTextRow(form, constraints, 3, "Message", promptArea);
+        JPanel system = new JPanel(new BorderLayout(6, 2));
+        system.setBorder(BorderFactory.createTitledBorder("System prompt"));
+        systemPromptArea.setLineWrap(true);
+        systemPromptArea.setWrapStyleWord(true);
+        system.add(new JScrollPane(systemPromptArea), BorderLayout.CENTER);
 
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton refreshModelsButton = new JButton("Refresh models");
-        refreshModelsButton.addActionListener(event -> refreshModels());
+        JPanel header = new JPanel(new BorderLayout(4, 4));
+        header.add(toolbar, BorderLayout.NORTH);
+        header.add(system, BorderLayout.CENTER);
+        return header;
+    }
+
+    private JComponent buildComposer() {
+        inputArea.setLineWrap(true);
+        inputArea.setWrapStyleWord(true);
+        inputArea.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(0xCFCFCF)),
+                BorderFactory.createEmptyBorder(6, 8, 6, 8)));
+        bindEnterToSend();
+
+        JPanel buttons = new JPanel();
+        buttons.setLayout(new javax.swing.BoxLayout(buttons, javax.swing.BoxLayout.Y_AXIS));
+        sendButton.setAlignmentX(CENTER_ALIGNMENT);
+        stopButton.setAlignmentX(CENTER_ALIGNMENT);
         sendButton.addActionListener(event -> sendChat());
         stopButton.addActionListener(event -> stopChat());
-        buttons.add(refreshModelsButton);
         buttons.add(sendButton);
+        buttons.add(Box.createVerticalStrut(4));
         buttons.add(stopButton);
-        buttons.add(statusLabel);
 
-        JPanel top = new JPanel(new BorderLayout(8, 8));
-        top.add(form, BorderLayout.CENTER);
-        top.add(buttons, BorderLayout.SOUTH);
-        add(top, BorderLayout.NORTH);
+        JPanel composer = new JPanel(new BorderLayout(8, 4));
+        composer.add(new JScrollPane(inputArea), BorderLayout.CENTER);
+        composer.add(buttons, BorderLayout.EAST);
 
-        responseArea.setEditable(false);
-        responseArea.setLineWrap(true);
-        responseArea.setWrapStyleWord(true);
-        logArea.setEditable(false);
-        JPanel center = new JPanel(new BorderLayout(8, 8));
-        center.add(new JScrollPane(responseArea), BorderLayout.CENTER);
-        center.add(new JScrollPane(logArea), BorderLayout.SOUTH);
-        add(center, BorderLayout.CENTER);
+        JPanel hint = new JPanel(new BorderLayout());
+        JLabel hintLabel = new JLabel("Enter to send  ·  Shift+Enter for a new line");
+        hintLabel.setForeground(new Color(0x9E9E9E));
+        hint.add(statusLabel, BorderLayout.WEST);
+        hint.add(hintLabel, BorderLayout.EAST);
+
+        JPanel south = new JPanel(new BorderLayout(4, 4));
+        south.add(composer, BorderLayout.CENTER);
+        south.add(hint, BorderLayout.SOUTH);
+        return south;
     }
 
-    private void addRow(JPanel form, GridBagConstraints constraints, int row, String label, java.awt.Component field) {
-        constraints.gridx = 0;
-        constraints.gridy = row;
-        constraints.weightx = 0.0d;
-        form.add(new JLabel(label), constraints);
-        constraints.gridx = 1;
-        constraints.weightx = 1.0d;
-        form.add(field, constraints);
-    }
-
-    private void addTextRow(JPanel form, GridBagConstraints constraints, int row, String label, JTextArea area) {
-        constraints.gridx = 0;
-        constraints.gridy = row;
-        constraints.weightx = 0.0d;
-        constraints.anchor = GridBagConstraints.NORTHWEST;
-        form.add(new JLabel(label), constraints);
-        constraints.gridx = 1;
-        constraints.weightx = 1.0d;
-        constraints.fill = GridBagConstraints.BOTH;
-        form.add(new JScrollPane(area), constraints);
-        constraints.fill = GridBagConstraints.HORIZONTAL;
-        constraints.anchor = GridBagConstraints.WEST;
+    private void bindEnterToSend() {
+        inputArea.getInputMap().put(KeyStroke.getKeyStroke("ENTER"), "send-chat");
+        inputArea.getInputMap().put(KeyStroke.getKeyStroke("shift ENTER"), "insert-newline");
+        inputArea.getActionMap().put("send-chat", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                sendChat();
+            }
+        });
+        inputArea.getActionMap().put("insert-newline", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                inputArea.insert("\n", inputArea.getCaretPosition());
+            }
+        });
     }
 
     private void refreshModels() {
@@ -130,12 +163,16 @@ public final class OllamaChatPanel extends JPanel {
                 onUi(new Runnable() {
                     @Override
                     public void run() {
+                        Object previous = modelCombo.getSelectedItem();
                         modelCombo.removeAllItems();
                         for (String name : names) {
                             modelCombo.addItem(name);
                         }
+                        if (previous != null) {
+                            modelCombo.setSelectedItem(previous);
+                        }
                         if (names.isEmpty()) {
-                            setStatus("No models installed on this AI server. Open Install to add one.");
+                            setStatus("No models installed. Open Install to add one.");
                         } else {
                             setStatus("Ready. " + names.size() + " model(s) available.");
                         }
@@ -148,39 +185,65 @@ public final class OllamaChatPanel extends JPanel {
                 onUi(new Runnable() {
                     @Override
                     public void run() {
-                        setStatus("Server offline or not reachable. Open Connections to fix it.");
-                        append("Connection error: " + ex.getMessage());
+                        setStatus("Server not reachable. Check Connections.");
+                        transcript.appendInfo("Connection error: " + ex.getMessage());
                     }
                 });
             }
         });
     }
 
+    private void newChat() {
+        if (chatTask != null) {
+            return;
+        }
+        history.clear();
+        transcript.clear();
+        showEmptyState();
+        setStatus("Started a new chat.");
+    }
+
+    private void showEmptyState() {
+        transcript.appendInfo("New conversation. Type a message below and press Enter.");
+    }
+
     private void sendChat() {
+        if (!sendButton.isEnabled()) {
+            return;
+        }
         final String modelName = (String) modelCombo.getSelectedItem();
         if (modelName == null || modelName.trim().isEmpty()) {
             setStatus("No model selected. Open Models or Install first.");
             return;
         }
-        final String userPrompt = promptArea.getText().trim();
+        final String userPrompt = inputArea.getText().trim();
         if (userPrompt.isEmpty()) {
             setStatus("Write a message before sending.");
             return;
         }
-        responseArea.setText("");
-        append("Sending message to " + modelName + " on " + model.getOllamaBaseUrl());
+
+        if (transcript.isEmpty() || history.isEmpty()) {
+            transcript.clear();
+        }
+        inputArea.setText("");
+        transcript.appendUser(userPrompt);
+        history.add(OllamaChatTurn.user(userPrompt));
+
+        transcript.startAssistant(modelName);
+        streamingAssistant.setLength(0);
         startElapsedTimer();
         setBusy(true);
 
         OllamaService.ChatRequest request = new OllamaService.ChatRequest(
-                modelName, systemPromptArea.getText(), userPrompt, keepAliveField.getText());
+                modelName, keepAliveField.getText(), buildConversation());
         chatTask = ollamaService.streamChat(request, new OllamaService.ChatListener() {
             @Override
             public void onContent(final String content) {
                 onUi(new Runnable() {
                     @Override
                     public void run() {
-                        responseArea.append(content);
+                        streamingAssistant.append(content);
+                        transcript.appendAssistantDelta(content);
                     }
                 });
             }
@@ -200,13 +263,7 @@ public final class OllamaChatPanel extends JPanel {
                 onUi(new Runnable() {
                     @Override
                     public void run() {
-                        stopElapsedTimer();
-                        setBusy(false);
-                        if (responseArea.getText().trim().isEmpty() && !result.getFallbackText().isEmpty()) {
-                            responseArea.setText(result.getFallbackText());
-                        }
-                        appendMetrics(result);
-                        setStatus("Ready.");
+                        finishTurn(result);
                     }
                 });
             }
@@ -218,21 +275,57 @@ public final class OllamaChatPanel extends JPanel {
                     public void run() {
                         stopElapsedTimer();
                         setBusy(false);
+                        chatTask = null;
+                        transcript.appendAssistantDelta("[error: " + ex.getMessage() + "]");
+                        transcript.finishAssistant();
                         setStatus("Chat failed.");
-                        append("ERROR: " + ex.getMessage());
                     }
                 });
             }
         });
     }
 
+    private void finishTurn(OllamaService.ChatResult result) {
+        stopElapsedTimer();
+        setBusy(false);
+        chatTask = null;
+        String assistantText = streamingAssistant.toString();
+        if (assistantText.trim().isEmpty() && !result.getFallbackText().isEmpty()) {
+            assistantText = result.getFallbackText();
+            transcript.appendAssistantDelta(assistantText);
+        }
+        transcript.finishAssistant();
+        history.add(OllamaChatTurn.assistant(assistantText));
+        if (result.hasMetrics()) {
+            setStatus(String.format("Ready · %d tokens · %.1f tok/s",
+                    result.getEvalCount(), result.tokensPerSecond()));
+        } else {
+            setStatus("Ready.");
+        }
+    }
+
+    private List<OllamaChatTurn> buildConversation() {
+        List<OllamaChatTurn> conversation = new ArrayList<OllamaChatTurn>();
+        String system = systemPromptArea.getText();
+        if (system != null && !system.trim().isEmpty()) {
+            conversation.add(OllamaChatTurn.system(system));
+        }
+        conversation.addAll(history);
+        return conversation;
+    }
+
     private void stopChat() {
         if (chatTask != null) {
             chatTask.cancel();
+            chatTask = null;
             stopElapsedTimer();
             setBusy(false);
-            setStatus("Cancelled.");
-            append("Chat request cancelled.");
+            transcript.appendAssistantDelta(" [stopped]");
+            transcript.finishAssistant();
+            if (!streamingAssistant.toString().trim().isEmpty()) {
+                history.add(OllamaChatTurn.assistant(streamingAssistant.toString()));
+            }
+            setStatus("Stopped.");
         }
     }
 
@@ -240,7 +333,7 @@ public final class OllamaChatPanel extends JPanel {
         requestStartedAtMillis = System.currentTimeMillis();
         elapsedTimer = new Timer(1000, event -> {
             long seconds = (System.currentTimeMillis() - requestStartedAtMillis) / 1000L;
-            setStatus("Waiting for first/next token ... " + seconds + "s. CPU-only models can take a while.");
+            setStatus("Generating ... " + seconds + "s");
         });
         elapsedTimer.start();
     }
@@ -252,32 +345,18 @@ public final class OllamaChatPanel extends JPanel {
         }
     }
 
-    private void appendMetrics(OllamaService.ChatResult result) {
-        if (result == null || !result.hasMetrics()) {
-            append("Chat complete.");
-            return;
-        }
-        double tokens = result.getEvalCount();
-        double seconds = result.getEvalDurationNanos() / 1_000_000_000.0d;
-        if (seconds > 0.0d) {
-            append(String.format("Chat complete: %.0f output tokens, %.2f tok/s.", tokens, tokens / seconds));
-        } else {
-            append("Chat complete: " + result.getEvalCount() + " output tokens.");
-        }
-    }
-
     private void setBusy(boolean busy) {
         sendButton.setEnabled(!busy);
         stopButton.setEnabled(busy);
         modelCombo.setEnabled(!busy);
+        inputArea.setEnabled(!busy);
+        if (!busy) {
+            inputArea.requestFocusInWindow();
+        }
     }
 
     private void setStatus(String status) {
         statusLabel.setText(status);
-    }
-
-    private void append(String message) {
-        UiSupport.appendLog(logArea, message);
     }
 
     private static void onUi(Runnable runnable) {
