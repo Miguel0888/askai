@@ -1,4 +1,4 @@
-﻿package com.aresstack.askai.client;
+package com.aresstack.askai.client;
 
 import com.aresstack.askai.catalog.OllamaModelImportProfile;
 import com.aresstack.askai.util.JsonSupport;
@@ -44,12 +44,20 @@ public final class OllamaClient {
         return JsonSupport.extractModelNames(getTagsJson());
     }
 
+    public OllamaModelListResponse getInstalledModels() throws OllamaRequestException {
+        return OllamaModelListResponse.fromJson(getTagsJson());
+    }
+
     public String getRunningModelsJson() throws OllamaRequestException {
         HttpRequest request = HttpRequest.newBuilder(endpoint("/api/ps"))
                 .timeout(Duration.ofMinutes(2))
                 .GET()
                 .build();
         return sendText(request);
+    }
+
+    public OllamaRunningModelListResponse getRunningModels() throws OllamaRequestException {
+        return OllamaRunningModelListResponse.fromJson(getRunningModelsJson());
     }
 
     public String getVersion() throws OllamaRequestException {

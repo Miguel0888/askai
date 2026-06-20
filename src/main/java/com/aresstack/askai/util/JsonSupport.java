@@ -1,4 +1,4 @@
-﻿package com.aresstack.askai.util;
+package com.aresstack.askai.util;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -166,11 +166,11 @@ public final class JsonSupport {
     public static String extractObjectValue(String json, String key) {
         int objectStart = findValueStart(json, key, '{');
         if (objectStart < 0) {
-            return ;
+            return "";
         }
         int objectEnd = findMatchingEnd(json, objectStart, '{', '}');
         if (objectEnd < 0) {
-            return ;
+            return "";
         }
         return json.substring(objectStart, objectEnd + 1);
     }
@@ -191,7 +191,7 @@ public final class JsonSupport {
         if (json == null || key == null) {
             return -1;
         }
-        String marker = " + key + ";
+        String marker = '"' + key + '"';
         int keyIndex = json.indexOf(marker);
         if (keyIndex < 0) {
             return -1;
@@ -218,9 +218,13 @@ public final class JsonSupport {
                     escaped = false;
                 } else if (ch == '\\') {
                     escaped = true;
-                } else if (ch == '') { inString = false; } continue; } if (ch == '') {
+                } else if (ch == '"') {
+                    inString = false;
+                }
+                continue;
+            }
+            if (ch == '"') {
                 inString = true;
-            } else if (ch == open) {
                 depth++;
             } else if (ch == close) {
                 depth--;
