@@ -6,6 +6,7 @@ import com.aresstack.huggingface.hub.download.DownloadProgress;
 import com.aresstack.huggingface.hub.download.DownloadResult;
 import com.aresstack.huggingface.hub.download.OverwritePolicy;
 import com.aresstack.huggingface.hub.model.HubFile;
+import com.aresstack.huggingface.hub.model.ModelSummary;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -33,10 +34,38 @@ public final class HuggingFaceModelLoader {
         this.token = token == null ? "" : token.trim();
     }
 
-    /** Lists the files of a model repository on the Hub. */
-    public List<HuggingFaceModelFile> listFiles(String endpoint, String repoId) throws HuggingFaceDownloadException {
+    /** Searches the Hub for model repositories, most-downloaded first. */
+    public List<HuggingFaceModelSearchResult> searchModels(String query, int limit) throws HuggingFaceDownloadException {
         try {
-            List<HubFile> files = hub(endpoint).models().model(repoId).files().execute();
+            List<ModelSummary> models = hub("").models().search(query == null ? "" : query)
+                    .sortByDownloads()
+                    .limit(limit)
+                    .execute()
+                    .getModels();
+            List<HuggingFaceModelSearchResult> mapped = new ArrayList<HuggingFaceModelSearchResult>();
+            for (ModelSummary summary : models) {
+                mapped.add(new HuggingFaceModelSearchResult(
+                        summary.getRepoId() != null ? summary.getRepoId() : summary.getId(),
+                        summary.getAuthor(),
+                        summary.getTask(),
+                        summary.getLibrary(),
+                        summary.getDownloads() == null ? 0L : summary.getDownloads(),
+                        summary.getLikes() == null ? 0L : summary.getLikes(),
+                        Boolean.TRUE.equals(summary.getGated())));
+            }
+            return mapped;
+        } catch (HuggingFaceHubException ex) {
+            throw new HuggingFaceDownloadException("Hugging Face search failed: " + ex.getMessage(), ex);
+        }
+    }
+
+    /** Lists the files of a model repository revision on the Hub. */
+    public List<HuggingFaceModelFile> listFiles(String endpoint, String repoId, String revision)
+            throws HuggingFaceDownloadException {
+        try {
+            List<HubFile> files = hub(endpoint).models().model(repoId).files()
+                    .revision(revision == null || revision.isBlank() ? "main" : revision)
+                    .execute();
             List<HuggingFaceModelFile> mapped = new ArrayList<HuggingFaceModelFile>();
             for (HubFile file : files) {
                 mapped.add(new HuggingFaceModelFile(file.getPath(), file.getSize() == null ? -1L : file.getSize()));

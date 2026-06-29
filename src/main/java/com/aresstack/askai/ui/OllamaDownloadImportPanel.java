@@ -1,32 +1,32 @@
 package com.aresstack.askai.ui;
 
 import com.aresstack.askai.AskAiModel;
-import com.aresstack.askai.catalog.OllamaModelCandidate;
-import com.aresstack.askai.catalog.OllamaModelCatalog;
+import com.aresstack.askai.catalog.OllamaModelImportProfile;
+import com.aresstack.askai.hub.HuggingFaceModelSearchResult;
 import com.aresstack.askai.importing.AskAiModelInstallation;
 import com.aresstack.askai.importing.AskAiModelStore;
 import com.aresstack.askai.importing.OllamaImportListener;
 import com.aresstack.askai.importing.OllamaImportPlan;
 import com.aresstack.askai.service.ModelDownloadService;
 import com.aresstack.askai.service.ModelInstallService;
-import com.aresstack.askai.settings.AskAiPaths;
-import com.aresstack.windirectml.workbench.download.DownloadAccessSettings;
 import com.aresstack.windirectml.workbench.download.DownloadFolderOpener;
-import com.aresstack.windirectml.workbench.download.DownloadOverrideStore;
 import com.aresstack.windirectml.workbench.download.ModelDownloadManifest;
-import com.aresstack.windirectml.workbench.download.ModelDownloader;
-import com.aresstack.windirectml.workbench.panels.DownloadAccessConfigDialog;
 
 import javax.swing.BorderFactory;
+import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JPanel;
+import javax.swing.JPasswordField;
 import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import java.awt.BorderLayout;
@@ -34,26 +34,40 @@ import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
-import java.awt.Window;
 import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Reuses the tested DirectML Workbench download code and adds Ollama import actions.
+ * Install panel driven by Hugging Face search.
+ *
+ * <p>The user searches the Hub, picks a repository, and AskAI loads the relevant model
+ * files via {@code huggingface4j} — no per-file URLs are shown or edited. Only the
+ * settings that genuinely cannot be derived from Hugging Face remain: an optional access
+ * token (gated repos), the Ollama target name, the revision/branch, the Ollama import
+ * profile (chat template), and an optional force flag.</p>
  */
 public final class OllamaDownloadImportPanel extends JPanel {
+
+    private static final String PROFILE_AUTO = "Auto (recommended)";
+    private static final String PROFILE_QWEN = "Qwen ChatML";
+    private static final String PROFILE_DEFAULT = "Default";
 
     private final AskAiModel model;
     private final ModelInstallService modelInstallService;
     private final ModelDownloadService modelDownloadService;
-    private final DownloadOverrideStore overrideStore;
     private final AskAiModelStore modelStore;
-    private final JComboBox<OllamaModelCandidate> candidateCombo;
-    private final JTextField targetModelNameField;
+
+    private final JTextField searchField;
+    private final JButton searchButton;
+    private final DefaultListModel<HuggingFaceModelSearchResult> resultsModel;
+    private final JList<HuggingFaceModelSearchResult> resultsList;
+    private final JTextField repoField;
+    private final JTextField revisionField;
+    private final JPasswordField tokenField;
+    private final JTextField installAsField;
     private final JTextField quantizationField;
+    private final JComboBox<String> profileCombo;
     private final JCheckBox forceDownloadBox;
-    private final JLabel localFolderLabel;
-    private final JLabel compatibilityLabel;
     private final JProgressBar progressBar;
     private final JTextArea logArea;
 
@@ -62,72 +76,100 @@ public final class OllamaDownloadImportPanel extends JPanel {
         this.model = model;
         this.modelInstallService = modelInstallService;
         this.modelDownloadService = modelDownloadService;
-        this.overrideStore = new DownloadOverrideStore(AskAiPaths.downloadOverridesFile());
         this.modelStore = new AskAiModelStore();
-        this.overrideStore.load();
-        this.candidateCombo = new JComboBox<OllamaModelCandidate>(
-                OllamaModelCatalog.candidates().toArray(new OllamaModelCandidate[0]));
-        this.targetModelNameField = new JTextField(34);
-        this.quantizationField = new JTextField(model.getDefaultQuantization(), 12);
+        this.searchField = new JTextField(28);
+        this.searchButton = new JButton("Search Hugging Face");
+        this.resultsModel = new DefaultListModel<HuggingFaceModelSearchResult>();
+        this.resultsList = new JList<HuggingFaceModelSearchResult>(resultsModel);
+        this.repoField = new JTextField(30);
+        this.revisionField = new JTextField("main", 10);
+        this.tokenField = new JPasswordField(24);
+        this.installAsField = new JTextField(24);
+        this.quantizationField = new JTextField(model.getDefaultQuantization(), 10);
+        this.profileCombo = new JComboBox<String>(new String[]{PROFILE_AUTO, PROFILE_QWEN, PROFILE_DEFAULT});
         this.forceDownloadBox = new JCheckBox("Force download");
-        this.localFolderLabel = new JLabel();
-        this.compatibilityLabel = new JLabel();
         this.progressBar = new JProgressBar(0, 100);
-        this.logArea = new JTextArea(18, 80);
+        this.logArea = new JTextArea(12, 80);
         buildUserInterface();
-        updateSelectionDetails();
     }
 
     private void buildUserInterface() {
         setLayout(new BorderLayout(8, 8));
         setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        add(buildTop(), BorderLayout.NORTH);
+        add(buildCenter(), BorderLayout.CENTER);
+        progressBar.setStringPainted(true);
+        add(progressBar, BorderLayout.SOUTH);
+    }
 
+    private JComponent buildTop() {
+        JPanel searchBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
+        searchBar.add(new JLabel("Search"));
+        searchBar.add(searchField);
+        searchBar.add(searchButton);
+        searchButton.addActionListener(event -> searchModels());
+        searchField.addActionListener(event -> searchModels());
+
+        resultsList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        resultsList.setVisibleRowCount(6);
+        resultsList.addListSelectionListener(event -> {
+            if (!event.getValueIsAdjusting()) {
+                onResultSelected();
+            }
+        });
+        JScrollPane resultsScroll = new JScrollPane(resultsList);
+        resultsScroll.setBorder(BorderFactory.createTitledBorder("Hugging Face models"));
+
+        JPanel top = new JPanel(new BorderLayout(6, 6));
+        top.add(searchBar, BorderLayout.NORTH);
+        top.add(resultsScroll, BorderLayout.CENTER);
+        top.add(buildForm(), BorderLayout.SOUTH);
+        return top;
+    }
+
+    private JComponent buildForm() {
         JPanel form = new JPanel(new GridBagLayout());
-        form.setBorder(BorderFactory.createTitledBorder("Install model on AI server"));
+        form.setBorder(BorderFactory.createTitledBorder("Install"));
         GridBagConstraints constraints = new GridBagConstraints();
-        constraints.insets = new Insets(4, 4, 4, 4);
+        constraints.insets = new Insets(3, 4, 3, 4);
         constraints.fill = GridBagConstraints.HORIZONTAL;
         constraints.anchor = GridBagConstraints.WEST;
 
-        addRow(form, constraints, 0, "Model", candidateCombo);
-        addRow(form, constraints, 1, "Install as", targetModelNameField);
-        addRow(form, constraints, 2, "Quantization", quantizationField);
-        addRow(form, constraints, 3, "Download folder", localFolderLabel);
-        addRow(form, constraints, 4, "Notes", compatibilityLabel);
-        candidateCombo.addActionListener(event -> updateSelectionDetails());
+        addRow(form, constraints, 0, "Repository", repoField);
+        addRow(form, constraints, 1, "Revision / branch", revisionField);
+        addRow(form, constraints, 2, "HF token (gated, optional)", tokenField);
+        addRow(form, constraints, 3, "Install as", installAsField);
+        addRow(form, constraints, 4, "Ollama profile", profileCombo);
+        addRow(form, constraints, 5, "Quantization", quantizationField);
 
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton accessButton = new JButton("Hugging Face Access");
-        accessButton.addActionListener(event -> configureAccess());
-        JButton openFolderButton = new JButton("Open download folder");
-        openFolderButton.addActionListener(event -> openFolder());
-        JButton validateButton = new JButton("Validate files");
-        validateButton.addActionListener(event -> validateLocalFiles());
-        JButton downloadButton = new JButton("Download files");
-        downloadButton.addActionListener(event -> downloadSelectedModel(false));
-        JButton importButton = new JButton("Install local files");
-        importButton.addActionListener(event -> importSelectedModel());
-        JButton fullInstallButton = new JButton("Download and install");
-        fullInstallButton.addActionListener(event -> downloadSelectedModel(true));
-
-        buttons.add(accessButton);
-        buttons.add(openFolderButton);
-        buttons.add(validateButton);
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         buttons.add(forceDownloadBox);
+        JButton openFolderButton = new JButton("Open model folder");
+        openFolderButton.addActionListener(event -> openModelFolder());
+        JButton downloadButton = new JButton("Download");
+        downloadButton.addActionListener(event -> startInstall(false));
+        JButton fullInstallButton = new JButton("Download and install");
+        fullInstallButton.addActionListener(event -> startInstall(true));
+        buttons.add(openFolderButton);
         buttons.add(downloadButton);
-        buttons.add(importButton);
         buttons.add(fullInstallButton);
 
-        JPanel top = new JPanel(new BorderLayout(8, 8));
-        top.add(form, BorderLayout.CENTER);
-        top.add(buttons, BorderLayout.SOUTH);
-        add(top, BorderLayout.NORTH);
+        GridBagConstraints buttonConstraints = new GridBagConstraints();
+        buttonConstraints.gridx = 0;
+        buttonConstraints.gridy = 6;
+        buttonConstraints.gridwidth = 2;
+        buttonConstraints.anchor = GridBagConstraints.WEST;
+        form.add(buttons, buttonConstraints);
+        return form;
+    }
 
-        progressBar.setStringPainted(true);
-        add(progressBar, BorderLayout.SOUTH);
-
+    private JComponent buildCenter() {
         logArea.setEditable(false);
-        add(new JScrollPane(logArea), BorderLayout.CENTER);
+        logArea.setLineWrap(true);
+        logArea.setWrapStyleWord(true);
+        JScrollPane scroll = new JScrollPane(logArea);
+        scroll.setBorder(BorderFactory.createTitledBorder("Log"));
+        return scroll;
     }
 
     private void addRow(JPanel form, GridBagConstraints constraints, int row, String label, java.awt.Component field) {
@@ -140,106 +182,217 @@ public final class OllamaDownloadImportPanel extends JPanel {
         form.add(field, constraints);
     }
 
-    private void updateSelectionDetails() {
-        OllamaModelCandidate candidate = selectedCandidate();
-        if (candidate == null) {
+    private void searchModels() {
+        final String query = searchField.getText().trim();
+        if (query.isEmpty()) {
+            append("Enter a search term, e.g. \"qwen2.5 coder 0.5b\".");
             return;
         }
-        targetModelNameField.setText(candidate.getDefaultOllamaModelName());
-        localFolderLabel.setText(installationFor(candidate).getRootDirectory().toString());
-        compatibilityLabel.setText(candidate.getCompatibilityNote());
-        append("Selected model: " + candidate.getDisplayName());
-        append("Note: " + candidate.getCompatibilityNote());
-        append("Ollama import profile: " + candidate.getImportProfile().getDisplayName());
+        final String token = token();
+        searchButton.setEnabled(false);
+        append("Searching Hugging Face for \"" + query + "\" ...");
+        new SwingWorker<List<HuggingFaceModelSearchResult>, Void>() {
+            @Override
+            protected List<HuggingFaceModelSearchResult> doInBackground() throws Exception {
+                return modelDownloadService.searchModels(query, token);
+            }
+
+            @Override
+            protected void done() {
+                searchButton.setEnabled(true);
+                try {
+                    List<HuggingFaceModelSearchResult> results = get();
+                    resultsModel.clear();
+                    for (HuggingFaceModelSearchResult result : results) {
+                        resultsModel.addElement(result);
+                    }
+                    append("Found " + results.size() + " model(s). Select one to install.");
+                } catch (Exception ex) {
+                    append("Search failed: " + rootMessage(ex));
+                }
+            }
+        }.execute();
     }
 
-    private void configureAccess() {
-        OllamaModelCandidate candidate = selectedCandidate();
-        ModelDownloadManifest manifest = effectiveManifest(candidate);
-        Window owner = SwingUtilities.getWindowAncestor(this);
-        DownloadAccessConfigDialog dialog = new DownloadAccessConfigDialog(owner, manifest,
-                overrideStore.accessSettings(manifest.modelId()));
-        dialog.setVisible(true);
-        if (dialog.isAccepted()) {
-            ModelDownloadManifest updatedManifest = manifest.withAllUrls(dialog.getEditedUrls());
-            overrideStore.storeOverrides(updatedManifest);
-            overrideStore.storeAccessSettings(updatedManifest.modelId(), dialog.getAccessSettings());
-            append("Stored Hugging Face access settings for " + updatedManifest.modelId());
+    private void onResultSelected() {
+        HuggingFaceModelSearchResult selected = resultsList.getSelectedValue();
+        if (selected == null) {
+            return;
+        }
+        repoField.setText(selected.getRepoId());
+        installAsField.setText(suggestInstallName(selected.getRepoId()));
+        profileCombo.setSelectedItem(PROFILE_AUTO);
+        if (selected.isGated()) {
+            append("Note: " + selected.getRepoId() + " is gated — an HF token may be required.");
         }
     }
 
-    private void openFolder() {
-        DownloadFolderOpener.openFolder(installationFor(selectedCandidate()).getRootDirectory(), this::append);
-    }
-
-    private void validateLocalFiles() {
-        OllamaModelCandidate candidate = selectedCandidate();
-        ModelDownloadManifest manifest = effectiveManifest(candidate);
-        AskAiModelInstallation installation = installationFor(candidate);
-        Path targetDir = installation.getSourceDirectory();
-        List<String> missing = ModelDownloader.missingRequiredFiles(manifest, targetDir);
-        if (missing.isEmpty()) {
-            append("All required local files are present: " + targetDir);
-        } else {
-            append("Missing local files: " + missing);
+    private void startInstall(final boolean importAfterDownload) {
+        final String repoId = repoField.getText().trim();
+        if (repoId.isEmpty()) {
+            append("Pick a model from the list or type a repository id (e.g. Qwen/Qwen2.5-Coder-0.5B-Instruct).");
+            return;
         }
-    }
-
-    private void downloadSelectedModel(final boolean importAfterDownload) {
-        final OllamaModelCandidate candidate = selectedCandidate();
-        final ModelDownloadManifest manifest = effectiveManifest(candidate);
-        final AskAiModelInstallation installation = installationFor(candidate);
-        final Path targetDir = installation.getSourceDirectory();
+        final String revision = revision();
+        final String token = token();
         final boolean force = forceDownloadBox.isSelected();
-        final DownloadAccessSettings accessSettings = overrideStore.accessSettings(manifest.modelId());
-        append("Preparing AskAI model folder " + installation.getRootDirectory());
-        append("Loading model files from Hugging Face (huggingface4j) into " + targetDir);
-        if (accessSettings.hasHuggingFaceToken()) {
-            append("Using Hugging Face token " + accessSettings.maskedHuggingFaceToken());
-        }
-        setProgress(0, "Downloading files");
+        append("Resolving files for " + repoId + " @ " + revision + " ...");
+        showProgress(0, "Resolving repository files");
 
+        new SwingWorker<ModelDownloadManifest, Void>() {
+            @Override
+            protected ModelDownloadManifest doInBackground() throws Exception {
+                return modelDownloadService.createManifest(repoId, revision, token);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    ModelDownloadManifest manifest = get();
+                    if (manifest.files().isEmpty()) {
+                        append("No relevant model files found in " + repoId + ".");
+                        showProgress(0, "Nothing to download");
+                        return;
+                    }
+                    append("Found " + manifest.files().size() + " relevant file(s) in " + repoId + ".");
+                    runDownload(manifest, repoId, revision, token, force, importAfterDownload);
+                } catch (Exception ex) {
+                    append("Could not resolve repository: " + rootMessage(ex));
+                    showProgress(0, "Failed");
+                }
+            }
+        }.execute();
+    }
+
+    private void runDownload(final ModelDownloadManifest manifest, final String repoId, final String revision,
+                             final String token, final boolean force, final boolean importAfterDownload) {
+        final AskAiModelInstallation installation = modelStore.installationFor(model.getModelRoot(), manifest);
+        final Path targetDir = installation.getSourceDirectory();
+        append("Loading model files via huggingface4j into " + targetDir);
         try {
             modelStore.prepareInstallation(installation);
         } catch (Exception ex) {
             append("ERROR: " + ex.getMessage());
-            setProgress(0, "Download failed");
+            showProgress(0, "Failed");
             return;
         }
+        showProgress(0, "Downloading files");
+        modelDownloadService.download(manifest, targetDir, force, token, new ModelDownloadService.DownloadListener() {
+            @Override
+            public void onLog(final String message) {
+                onUi(() -> append(message));
+            }
 
-        modelDownloadService.download(manifest, targetDir, force, accessSettings.huggingFaceToken(),
-                new ModelDownloadService.DownloadListener() {
+            @Override
+            public void onProgress(final int percent, final String text) {
+                showProgress(percent, text);
+            }
+
+            @Override
+            public void onComplete() {
+                onUi(() -> {
+                    append("Download complete: " + targetDir);
+                    if (importAfterDownload) {
+                        importModel(installation, targetDir, repoId);
+                    } else {
+                        showProgress(100, "Files downloaded");
+                    }
+                });
+            }
+
+            @Override
+            public void onError(final Exception ex) {
+                onUi(() -> {
+                    append("ERROR: " + ex.getMessage());
+                    showProgress(0, "Download failed");
+                });
+            }
+        });
+    }
+
+    private void importModel(final AskAiModelInstallation installation, final Path targetDir, final String repoId) {
+        final String modelName = installAsField.getText().trim();
+        final String quantization = quantizationField.getText().trim();
+        final OllamaModelImportProfile profile = selectedProfile(repoId);
+        if (modelName.isEmpty()) {
+            append("ERROR: 'Install as' (Ollama model name) is empty.");
+            return;
+        }
+        append("Installing " + targetDir + " as " + modelName + " (profile: " + profile.getDisplayName() + ")");
+        append("Target AI server: " + model.getOllamaBaseUrl());
+        showProgress(0, "Installing");
+
+        new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                OllamaImportPlan plan = new OllamaImportPlan(targetDir, modelName, quantization, profile, installation);
+                return modelInstallService.install(plan, new OllamaImportListener() {
                     @Override
-                    public void onLog(final String message) {
+                    public void onMessage(String message) {
                         onUi(() -> append(message));
                     }
 
                     @Override
-                    public void onProgress(final int percent, final String text) {
-                        OllamaDownloadImportPanel.this.setProgress(percent, text);
-                    }
-
-                    @Override
-                    public void onComplete() {
-                        onUi(() -> {
-                            append("Download complete: " + targetDir);
-                            validateLocalFiles();
-                            if (importAfterDownload) {
-                                importSelectedModel();
-                            } else {
-                                setProgress(100, "Files downloaded");
-                            }
-                        });
-                    }
-
-                    @Override
-                    public void onError(final Exception ex) {
-                        onUi(() -> {
-                            append("ERROR: " + ex.getMessage());
-                            setProgress(0, "Download failed");
-                        });
+                    public void onProgress(int percent, String text) {
+                        showProgress(percent, text);
                     }
                 });
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    append("Install result: " + get());
+                    showProgress(100, "Installed");
+                } catch (Exception ex) {
+                    append("ERROR: " + rootMessage(ex));
+                    showProgress(0, "Install failed");
+                }
+            }
+        }.execute();
+    }
+
+    private OllamaModelImportProfile selectedProfile(String repoId) {
+        Object selected = profileCombo.getSelectedItem();
+        if (PROFILE_QWEN.equals(selected)) {
+            return OllamaModelImportProfile.qwenChatMl();
+        }
+        if (PROFILE_DEFAULT.equals(selected)) {
+            return OllamaModelImportProfile.plain();
+        }
+        return repoId.toLowerCase().contains("qwen")
+                ? OllamaModelImportProfile.qwenChatMl()
+                : OllamaModelImportProfile.plain();
+    }
+
+    private void openModelFolder() {
+        DownloadFolderOpener.openFolder(model.getModelRoot(), this::append);
+    }
+
+    private static String suggestInstallName(String repoId) {
+        if (repoId == null || repoId.isBlank()) {
+            return "";
+        }
+        int slash = repoId.lastIndexOf('/');
+        String name = slash < 0 ? repoId : repoId.substring(slash + 1);
+        return name.toLowerCase() + ":latest";
+    }
+
+    private String revision() {
+        String revision = revisionField.getText().trim();
+        return revision.isEmpty() ? "main" : revision;
+    }
+
+    private String token() {
+        return new String(tokenField.getPassword()).trim();
+    }
+
+    private static String rootMessage(Throwable ex) {
+        Throwable cause = ex;
+        while (cause.getCause() != null && cause.getCause() != cause) {
+            cause = cause.getCause();
+        }
+        return cause.getMessage() == null ? cause.toString() : cause.getMessage();
     }
 
     private static void onUi(Runnable runnable) {
@@ -250,70 +403,8 @@ public final class OllamaDownloadImportPanel extends JPanel {
         }
     }
 
-    private void importSelectedModel() {
-        final OllamaModelCandidate candidate = selectedCandidate();
-        final AskAiModelInstallation installation = installationFor(candidate);
-        final Path targetDir = installation.getSourceDirectory();
-        final String modelName = targetModelNameField.getText().trim();
-        final String quantization = quantizationField.getText().trim();
-        if (modelName.isEmpty()) {
-            append("ERROR: Ollama model name is empty.");
-            return;
-        }
-        append("Installing local files from " + targetDir + " as " + modelName);
-        append("AskAI model folder: " + installation.getRootDirectory());
-        append("Ollama artifacts folder: " + installation.getOllamaDirectory());
-        append("Target AI server: " + model.getOllamaBaseUrl());
-        if (!candidate.isRecommendedForSpike()) {
-            append("Warning: this model is not marked as the safest install path: " + candidate.getCompatibilityNote());
-        }
-        setProgress(0, "Installing");
-
-        new SwingWorker<String, Void>() {
-            @Override
-            protected String doInBackground() throws Exception {
-                OllamaImportPlan plan = new OllamaImportPlan(targetDir, modelName, quantization,
-                        candidate.getImportProfile(), installation);
-                return modelInstallService.install(plan, new OllamaImportListener() {
-                    @Override
-                    public void onMessage(String message) {
-                        append(message);
-                    }
-
-                    @Override
-                    public void onProgress(int percent, String text) {
-                        OllamaDownloadImportPanel.this.setProgress(percent, text);
-                    }
-                });
-            }
-
-            @Override
-            protected void done() {
-                try {
-                    append("Install result: " + get());
-                    OllamaDownloadImportPanel.this.setProgress(100, "Installed");
-                } catch (Exception ex) {
-                    append("ERROR: " + ex.getMessage());
-                    OllamaDownloadImportPanel.this.setProgress(0, "Install failed");
-                }
-            }
-        }.execute();
-    }
-
-    private OllamaModelCandidate selectedCandidate() {
-        return (OllamaModelCandidate) candidateCombo.getSelectedItem();
-    }
-
-    private ModelDownloadManifest effectiveManifest(OllamaModelCandidate candidate) {
-        return overrideStore.applyOverrides(candidate.getManifest());
-    }
-
-    private AskAiModelInstallation installationFor(OllamaModelCandidate candidate) {
-        return modelStore.installationFor(model.getModelRoot(), candidate.getManifest());
-    }
-
-    private void setProgress(final int value, final String text) {
-        SwingUtilities.invokeLater(new Runnable() {
+    private void showProgress(final int value, final String text) {
+        onUi(new Runnable() {
             @Override
             public void run() {
                 progressBar.setValue(Math.max(0, Math.min(100, value)));

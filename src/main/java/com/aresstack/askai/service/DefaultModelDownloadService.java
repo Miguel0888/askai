@@ -2,7 +2,9 @@ package com.aresstack.askai.service;
 
 import com.aresstack.askai.hub.HuggingFaceDownloadException;
 import com.aresstack.askai.hub.HuggingFaceFileRef;
+import com.aresstack.askai.hub.HuggingFaceManifestBuilder;
 import com.aresstack.askai.hub.HuggingFaceModelLoader;
+import com.aresstack.askai.hub.HuggingFaceModelSearchResult;
 import com.aresstack.windirectml.workbench.download.ModelDownloadManifest;
 import com.aresstack.windirectml.workbench.download.ModelFileDescriptor;
 
@@ -25,7 +27,24 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class DefaultModelDownloadService implements ModelDownloadService {
 
+    private static final int SEARCH_LIMIT = 25;
+    private static final String HF_ENDPOINT = "https://huggingface.co";
+
     private final ExecutorService executor = Executors.newCachedThreadPool(new DaemonThreadFactory());
+
+    @Override
+    public List<HuggingFaceModelSearchResult> searchModels(String query, String token)
+            throws HuggingFaceDownloadException {
+        return new HuggingFaceModelLoader(token).searchModels(query, SEARCH_LIMIT);
+    }
+
+    @Override
+    public ModelDownloadManifest createManifest(String repoId, String revision, String token)
+            throws HuggingFaceDownloadException {
+        List<HuggingFaceModelLoader.HuggingFaceModelFile> files =
+                new HuggingFaceModelLoader(token).listFiles(HF_ENDPOINT, repoId, revision);
+        return HuggingFaceManifestBuilder.build(repoId, revision, files);
+    }
 
     @Override
     public Task download(final ModelDownloadManifest manifest, final Path targetDir, final boolean force,
