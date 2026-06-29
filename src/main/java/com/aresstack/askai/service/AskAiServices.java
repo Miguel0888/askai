@@ -9,5 +9,7 @@ public interface AskAiServices {
 
     ModelInstallService modelInstall();
 
+    ModelDownloadService modelDownload();
+
     FeatureActionService featureActions();
 }

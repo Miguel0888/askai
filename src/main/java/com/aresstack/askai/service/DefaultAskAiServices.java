@@ -9,11 +9,13 @@ public final class DefaultAskAiServices implements AskAiServices {
 
     private final OllamaService ollamaService;
     private final ModelInstallService modelInstallService;
+    private final ModelDownloadService modelDownloadService;
     private final FeatureActionService featureActionService;
 
     public DefaultAskAiServices(AskAiModel model) {
         this.ollamaService = new DefaultOllamaService(model);
         this.modelInstallService = new DefaultModelInstallService(model);
+        this.modelDownloadService = new DefaultModelDownloadService();
         this.featureActionService = new OllamaFeatureActionService(model);
     }
 
@@ -25,6 +27,11 @@ public final class DefaultAskAiServices implements AskAiServices {
     @Override
     public ModelInstallService modelInstall() {
         return modelInstallService;
+    }
+
+    @Override
+    public ModelDownloadService modelDownload() {
+        return modelDownloadService;
     }
 
     @Override

@@ -7,6 +7,7 @@ import com.aresstack.askai.importing.AskAiModelInstallation;
 import com.aresstack.askai.importing.AskAiModelStore;
 import com.aresstack.askai.importing.OllamaImportListener;
 import com.aresstack.askai.importing.OllamaImportPlan;
+import com.aresstack.askai.service.ModelDownloadService;
 import com.aresstack.askai.service.ModelInstallService;
 import com.aresstack.askai.settings.AskAiPaths;
 import com.aresstack.windirectml.workbench.download.DownloadAccessSettings;
@@ -44,6 +45,7 @@ public final class OllamaDownloadImportPanel extends JPanel {
 
     private final AskAiModel model;
     private final ModelInstallService modelInstallService;
+    private final ModelDownloadService modelDownloadService;
     private final DownloadOverrideStore overrideStore;
     private final AskAiModelStore modelStore;
     private final JComboBox<OllamaModelCandidate> candidateCombo;
@@ -55,9 +57,11 @@ public final class OllamaDownloadImportPanel extends JPanel {
     private final JProgressBar progressBar;
     private final JTextArea logArea;
 
-    public OllamaDownloadImportPanel(AskAiModel model, ModelInstallService modelInstallService) {
+    public OllamaDownloadImportPanel(AskAiModel model, ModelInstallService modelInstallService,
+                                     ModelDownloadService modelDownloadService) {
         this.model = model;
         this.modelInstallService = modelInstallService;
+        this.modelDownloadService = modelDownloadService;
         this.overrideStore = new DownloadOverrideStore(AskAiPaths.downloadOverridesFile());
         this.modelStore = new AskAiModelStore();
         this.overrideStore.load();
@@ -189,37 +193,61 @@ public final class OllamaDownloadImportPanel extends JPanel {
         final boolean force = forceDownloadBox.isSelected();
         final DownloadAccessSettings accessSettings = overrideStore.accessSettings(manifest.modelId());
         append("Preparing AskAI model folder " + installation.getRootDirectory());
-        append("Downloading model source files to " + targetDir);
+        append("Loading model files from Hugging Face (huggingface4j) into " + targetDir);
+        if (accessSettings.hasHuggingFaceToken()) {
+            append("Using Hugging Face token " + accessSettings.maskedHuggingFaceToken());
+        }
         setProgress(0, "Downloading files");
 
-        new SwingWorker<Void, Void>() {
-            @Override
-            protected Void doInBackground() throws Exception {
-                modelStore.prepareInstallation(installation);
-                ModelDownloader.downloadFromManifest(manifest, targetDir, force,
-                        OllamaDownloadImportPanel.this::append,
-                        event -> OllamaDownloadImportPanel.this.setProgress(event.aggregatePercent(), event.localFilename()),
-                        model.getProxyConfiguration(), accessSettings);
-                return null;
-            }
+        try {
+            modelStore.prepareInstallation(installation);
+        } catch (Exception ex) {
+            append("ERROR: " + ex.getMessage());
+            setProgress(0, "Download failed");
+            return;
+        }
 
-            @Override
-            protected void done() {
-                try {
-                    get();
-                    append("Download complete: " + targetDir);
-                    validateLocalFiles();
-                    if (importAfterDownload) {
-                        importSelectedModel();
-                    } else {
-                        OllamaDownloadImportPanel.this.setProgress(100, "Files downloaded");
+        modelDownloadService.download(manifest, targetDir, force, accessSettings.huggingFaceToken(),
+                new ModelDownloadService.DownloadListener() {
+                    @Override
+                    public void onLog(final String message) {
+                        onUi(() -> append(message));
                     }
-                } catch (Exception ex) {
-                    append("ERROR: " + ex.getMessage());
-                    OllamaDownloadImportPanel.this.setProgress(0, "Download failed");
-                }
-            }
-        }.execute();
+
+                    @Override
+                    public void onProgress(final int percent, final String text) {
+                        OllamaDownloadImportPanel.this.setProgress(percent, text);
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        onUi(() -> {
+                            append("Download complete: " + targetDir);
+                            validateLocalFiles();
+                            if (importAfterDownload) {
+                                importSelectedModel();
+                            } else {
+                                setProgress(100, "Files downloaded");
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError(final Exception ex) {
+                        onUi(() -> {
+                            append("ERROR: " + ex.getMessage());
+                            setProgress(0, "Download failed");
+                        });
+                    }
+                });
+    }
+
+    private static void onUi(Runnable runnable) {
+        if (SwingUtilities.isEventDispatchThread()) {
+            runnable.run();
+        } else {
+            SwingUtilities.invokeLater(runnable);
+        }
     }
 
     private void importSelectedModel() {
