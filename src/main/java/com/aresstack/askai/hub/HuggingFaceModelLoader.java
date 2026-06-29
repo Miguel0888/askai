@@ -7,6 +7,7 @@ import com.aresstack.huggingface.hub.download.DownloadResult;
 import com.aresstack.huggingface.hub.download.OverwritePolicy;
 import com.aresstack.huggingface.hub.model.HubFile;
 import com.aresstack.huggingface.hub.model.ModelSummary;
+import com.aresstack.winproxy.ProxyConfiguration;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -25,13 +26,15 @@ import java.util.Map;
  * the library's DTOs/exceptions to AskAI types so the rest of the app never sees
  * huggingface4j classes.</p>
  */
-public final class HuggingFaceModelLoader {
+public class HuggingFaceModelLoader {
 
     private final String token;
+    private final ProxyConfiguration proxyConfiguration;
     private final Map<String, HuggingFaceHub> hubByEndpoint = new HashMap<String, HuggingFaceHub>();
 
-    public HuggingFaceModelLoader(String token) {
+    public HuggingFaceModelLoader(String token, ProxyConfiguration proxyConfiguration) {
         this.token = token == null ? "" : token.trim();
+        this.proxyConfiguration = proxyConfiguration;
     }
 
     /** Searches the Hub for model repositories, most-downloaded first. */
@@ -119,6 +122,12 @@ public final class HuggingFaceModelLoader {
             builder = builder.endpoint(key);
         }
         builder = token.isEmpty() ? builder.anonymous() : builder.accessToken(token);
+        HuggingFaceProxySettings proxy = HuggingFaceProxySettings.from(proxyConfiguration);
+        if (proxy.hasProxy()) {
+            builder = builder.proxy(proxy.proxy());
+        } else if (proxy.hasSelector()) {
+            builder = builder.proxySelector(proxy.selector());
+        }
         HuggingFaceHub hub = builder.build();
         hubByEndpoint.put(key, hub);
         return hub;

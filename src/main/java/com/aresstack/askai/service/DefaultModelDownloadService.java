@@ -5,6 +5,7 @@ import com.aresstack.askai.hub.HuggingFaceFileRef;
 import com.aresstack.askai.hub.HuggingFaceManifestBuilder;
 import com.aresstack.askai.hub.HuggingFaceModelLoader;
 import com.aresstack.askai.hub.HuggingFaceModelSearchResult;
+import com.aresstack.winproxy.ProxyConfiguration;
 import com.aresstack.windirectml.workbench.download.ModelDownloadManifest;
 import com.aresstack.windirectml.workbench.download.ModelFileDescriptor;
 
@@ -30,19 +31,40 @@ public final class DefaultModelDownloadService implements ModelDownloadService {
     private static final int SEARCH_LIMIT = 25;
     private static final String HF_ENDPOINT = "https://huggingface.co";
 
+    /** Builds a loader for the given token and the proxy configuration current at call time. */
+    public interface LoaderFactory {
+        HuggingFaceModelLoader create(String token, ProxyConfiguration proxyConfiguration);
+    }
+
     private final ExecutorService executor = Executors.newCachedThreadPool(new DaemonThreadFactory());
+    private final ProxyConfigurationProvider proxyConfigurationProvider;
+    private final LoaderFactory loaderFactory;
+
+    public DefaultModelDownloadService(ProxyConfigurationProvider proxyConfigurationProvider) {
+        this(proxyConfigurationProvider, HuggingFaceModelLoader::new);
+    }
+
+    DefaultModelDownloadService(ProxyConfigurationProvider proxyConfigurationProvider, LoaderFactory loaderFactory) {
+        this.proxyConfigurationProvider = proxyConfigurationProvider;
+        this.loaderFactory = loaderFactory;
+    }
+
+    /** Builds a loader with the proxy configuration read fresh from the provider. */
+    private HuggingFaceModelLoader newLoader(String token) {
+        return loaderFactory.create(token, proxyConfigurationProvider.get());
+    }
 
     @Override
     public List<HuggingFaceModelSearchResult> searchModels(String query, String token)
             throws HuggingFaceDownloadException {
-        return new HuggingFaceModelLoader(token).searchModels(query, SEARCH_LIMIT);
+        return newLoader(token).searchModels(query, SEARCH_LIMIT);
     }
 
     @Override
     public ModelDownloadManifest createManifest(String repoId, String revision, String token)
             throws HuggingFaceDownloadException {
         List<HuggingFaceModelLoader.HuggingFaceModelFile> files =
-                new HuggingFaceModelLoader(token).listFiles(HF_ENDPOINT, repoId, revision);
+                newLoader(token).listFiles(HF_ENDPOINT, repoId, revision);
         return HuggingFaceManifestBuilder.build(repoId, revision, files);
     }
 
@@ -70,7 +92,7 @@ public final class DefaultModelDownloadService implements ModelDownloadService {
 
     private void runDownload(ModelDownloadManifest manifest, Path targetDir, boolean force, String token,
                              DownloadListener listener) throws Exception {
-        HuggingFaceModelLoader loader = new HuggingFaceModelLoader(token);
+        HuggingFaceModelLoader loader = newLoader(token);
         List<ModelFileDescriptor> files = manifest.files();
         final int total = files.size();
         int index = 0;

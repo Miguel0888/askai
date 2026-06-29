@@ -15,7 +15,7 @@ public final class DefaultAskAiServices implements AskAiServices {
     public DefaultAskAiServices(AskAiModel model) {
         this.ollamaService = new DefaultOllamaService(model);
         this.modelInstallService = new DefaultModelInstallService(model);
-        this.modelDownloadService = new DefaultModelDownloadService();
+        this.modelDownloadService = new DefaultModelDownloadService(model::getProxyConfiguration);
         this.featureActionService = new OllamaFeatureActionService(model);
     }
 

@@ -68,5 +68,5 @@ Der HF-Token für gated Modelle wird im **Install**-Tab pro Sitzung eingegeben (
 
 ## Hinweise
 
-- Der Hugging-Face-Download-Pfad verbindet sich derzeit direkt; die **Network**-Proxy-Einstellung greift hier noch nicht. Für Betrieb hinter einem Proxy bitte separat melden.
+- Alle Hugging-Face-Operationen (Suche, Dateiliste, Download) laufen über die im **Network**-Tab konfigurierte Proxy-Einstellung. Manueller Proxy nutzt einen festen `java.net.Proxy`, PAC-/Windows-Modi einen `ProxySelector` über `win-proxy-java`; `Disabled` verbindet direkt. Die Einstellung wirkt sofort — es gibt keinen separaten „Apply to downloads"-Schritt mehr.
 - `huggingface4j` und `ollama4j` werden ins Fat-Jar gebündelt; es ist keine externe CLI nötig.

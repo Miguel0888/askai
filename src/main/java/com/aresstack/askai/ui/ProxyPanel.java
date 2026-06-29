@@ -18,6 +18,9 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
@@ -77,13 +80,10 @@ public final class ProxyPanel extends JPanel {
         form.add(manualPort);
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton apply = new JButton("Apply to downloads");
-        apply.addActionListener(e -> apply());
         JButton test = new JButton("Resolve test URL");
         test.addActionListener(e -> resolveTestUrl());
         JButton defaults = new JButton("Reset default");
         defaults.addActionListener(e -> resetDefault());
-        buttons.add(apply);
         buttons.add(test);
         buttons.add(defaults);
 
@@ -95,13 +95,45 @@ public final class ProxyPanel extends JPanel {
         log = new JTextArea(12, 60);
         log.setEditable(false);
         add(new JScrollPane(log), BorderLayout.CENTER);
+        append("Proxy changes apply immediately to all Hugging Face operations.");
         append("Default is PAC_URL: Windows AutoConfigURL/WPAD -> PAC download -> FindProxyForURL.");
+
+        installLiveBindings();
     }
 
-    private void apply() {
-        ProxyConfiguration cfg = buildConfiguration();
-        model.setProxyConfiguration(cfg);
-        append("Applied proxy mode for downloads: " + cfg.getMode());
+    /**
+     * Writes the current UI state straight into the model on every relevant change, so the
+     * proxy used by Hugging Face search, manifest and download is always the configured one —
+     * there is no separate "apply to downloads" step.
+     */
+    private void installLiveBindings() {
+        mode.addActionListener(e -> {
+            writeConfiguration();
+            append("Proxy mode: " + selectedMode());
+        });
+        DocumentListener onEdit = new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent event) {
+                writeConfiguration();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent event) {
+                writeConfiguration();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent event) {
+                writeConfiguration();
+            }
+        };
+        for (JTextComponent field : new JTextComponent[]{manualHost, manualPort, pacUrl, testUrl, pacUrlDiscoveryScript}) {
+            field.getDocument().addDocumentListener(onEdit);
+        }
+    }
+
+    private void writeConfiguration() {
+        model.setProxyConfiguration(buildConfiguration());
     }
 
     private void resetDefault() {
