@@ -43,7 +43,6 @@ public final class OllamaConfigPanel extends JPanel {
         buildUserInterface();
         append("Config loaded.");
         append("Settings file: " + AskAiPaths.settingsFile());
-        append("Download access/URL overrides: " + AskAiPaths.downloadOverridesFile());
     }
 
     private void buildUserInterface() {
