@@ -1,6 +1,6 @@
 ## Projektstatus
 
-**Dieses Repository wird nicht mehr aktiv weiterentwickelt und soll archiviert werden.** AskAI hat sich in einer separaten Nachfolge-Codebasis erheblich weiterentwickelt. Das Nachfolgeprojekt soll unter der GitHub-Organisation **AresDEC** veröffentlicht werden; das entsprechende Repository existiert jedoch noch nicht.
+**Dieses Repository wird nicht mehr aktiv weiterentwickelt und soll archiviert werden.** AskAI hat sich in einer separaten Nachfolge-Codebasis erheblich weiterentwickelt. Das Nachfolgeprojekt soll unter der GitHub-Organisation **AresStack** veröffentlicht werden; das entsprechende Repository existiert jedoch noch nicht.
 
 ### Warum die Entwicklung in ein separates Repository verlagert wurde
 
@@ -85,4 +85,4 @@ Der HF-Token für gated Modelle wird im **Install**-Tab pro Sitzung eingegeben (
 ## Hinweise
 
 - Alle Hugging-Face-Operationen (Suche, Dateiliste, Download) laufen über die im **Network**-Tab konfigurierte Proxy-Einstellung. Manueller Proxy nutzt einen festen `java.net.Proxy`, PAC-/Windows-Modi einen `ProxySelector` über `win-proxy-java`; `Disabled` verbindet direkt. Die Einstellung wirkt sofort — es gibt keinen separaten „Apply to downloads"-Schritt mehr.
-- `huggingface4j` und `ollama4j` werden ins Fat-Jar gebündelt; es ist keine externe CLI nötig.
+- `huggingface4j` und `ollama4j` werden ins Fat-Jar gebündelt; es gibt keine externe CLI nötig.
