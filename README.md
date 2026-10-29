@@ -1,6 +1,6 @@
 ## Projektstatus
 
-**Dieses Repository wird nicht mehr aktiv weiterentwickelt und soll archiviert werden.** AskAI hat sich in einer separaten Nachfolge-Codebasis erheblich weiterentwickelt. Das Nachfolgeprojekt soll unter der GitHub-Organisation **AresStack** veröffentlicht werden; das entsprechende Repository existiert jedoch noch nicht.
+**Dieses Repository wird nicht mehr aktiv weiterentwickelt und soll archiviert werden.** AskAI hat sich in einer separaten Nachfolge-Codebasis erheblich weiterentwickelt. Das Nachfolgeprojekt wird unter der GitHub-Organisation **AresStack** weiterentwickelt: **[aresstack/askai](https://github.com/aresstack/askai)**.
 
 ### Warum die Entwicklung in ein separates Repository verlagert wurde
 
@@ -10,7 +10,7 @@ Damit AskAI weiterhin unter Java 8 laufen konnte, wurde die Entwicklung in einem
 
 Seitdem hat sich die Java-8-Codebasis weit über den ursprünglichen Stand hinausentwickelt und umfangreiche neue Funktionen sowie eine modulare Architektur erhalten. Diese Änderungen hier nachzubauen, würde Arbeit duplizieren und zwei auseinanderlaufende Entwicklungszweige erzeugen. Die Weiterentwicklung wird deshalb auf der ausgebauten Codebasis fortgesetzt, statt dieses Repository als Hauptentwicklungszweig wiederzubeleben. Geplant ist, die Nachfolgeversion auf Java 21 umzustellen und wieder die offizielle Ollama4j-Bibliothek zu verwenden.
 
-Dieses Repository bleibt als historische Referenz erhalten und wird nicht gelöscht. Sobald das Nachfolge-Repository veröffentlicht wurde, wird der Link hier ergänzt.
+Dieses Repository bleibt als historische Referenz erhalten und wird nicht gelöscht. Das Nachfolge-Repository ist [aresstack/askai](https://github.com/aresstack/askai); es führt die vollständige Git-Historie von askai-java8 weiter.
 
 ---
 
