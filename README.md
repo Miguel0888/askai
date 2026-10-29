@@ -1,16 +1,16 @@
-## Project status
+## Projektstatus
 
-**This repository is no longer actively developed and is scheduled to be archived.** AskAI has evolved substantially in a separate successor codebase. The successor is planned to be published under the **AresDEC** GitHub organization, but that repository has not been published yet.
+**Dieses Repository wird nicht mehr aktiv weiterentwickelt und soll archiviert werden.** AskAI hat sich in einer separaten Nachfolge-Codebasis erheblich weiterentwickelt. Das Nachfolgeprojekt soll unter der GitHub-Organisation **AresDEC** veröffentlicht werden; das entsprechende Repository existiert jedoch noch nicht.
 
-### Why development moved to a separate repository
+### Warum die Entwicklung in ein separates Repository verlagert wurde
 
-AskAI was originally created primarily as a desktop client for chatting with locally hosted AI models through Ollama. Ollama was therefore a core part of the application. The original implementation used the official [`ollama4j`](https://github.com/ollama4j/ollama4j) library, but the version needed by the project was not compatible with Java 8.
+AskAI wurde ursprünglich vor allem als Desktop-Anwendung entwickelt, um mit lokal betriebenen KI-Modellen über Ollama zu chatten. Ollama war daher ein zentraler Bestandteil der Anwendung. Die ursprüngliche Implementierung verwendete die offizielle Bibliothek [`ollama4j`](https://github.com/ollama4j/ollama4j), aber die für das Projekt benötigte Version war nicht mit Java 8 kompatibel.
 
-To keep AskAI usable on Java 8, development continued in a separate repository with a small, purpose-built Java 8-compatible Ollama client (`ollama4j-java8`). It implements the operations the application needs rather than the full feature set of the official library. Keeping this implementation separate also preserved the option of returning to the official Ollama4j library once the application could move to a newer Java baseline.
+Damit AskAI weiterhin unter Java 8 laufen konnte, wurde die Entwicklung in einem separaten Repository mit einem kleinen, gezielt auf die benötigten Funktionen beschränkten Java-8-kompatiblen Ollama-Client (`ollama4j-java8`) fortgesetzt. Dieser implementiert nur die von der Anwendung benötigten Operationen, nicht den gesamten Funktionsumfang der offiziellen Bibliothek. Die Trennung hielt zugleich die Möglichkeit offen, später zur offiziellen Ollama4j-Bibliothek zurückzukehren, sobald die Anwendung wieder auf einer neueren Java-Basis aufbauen kann.
 
-Since then, the Java 8 codebase has grown far beyond this original project, with substantial new functionality and a modular architecture. Rebuilding those changes here would duplicate work and leave two diverging development lines. The successor will therefore continue from the evolved codebase. The plan is to move it to Java 21 and return to the official Ollama4j library, rather than revive this repository as the main development line.
+Seitdem hat sich die Java-8-Codebasis weit über den ursprünglichen Stand hinausentwickelt und umfangreiche neue Funktionen sowie eine modulare Architektur erhalten. Diese Änderungen hier nachzubauen, würde Arbeit duplizieren und zwei auseinanderlaufende Entwicklungszweige erzeugen. Die Weiterentwicklung wird deshalb auf der ausgebauten Codebasis fortgesetzt, statt dieses Repository als Hauptentwicklungszweig wiederzubeleben. Geplant ist, die Nachfolgeversion auf Java 21 umzustellen und wieder die offizielle Ollama4j-Bibliothek zu verwenden.
 
-This repository is retained as a historical reference, not deleted. A link to the successor will be added here once its repository has been published.
+Dieses Repository bleibt als historische Referenz erhalten und wird nicht gelöscht. Sobald das Nachfolge-Repository veröffentlicht wurde, wird der Link hier ergänzt.
 
 ---
 
